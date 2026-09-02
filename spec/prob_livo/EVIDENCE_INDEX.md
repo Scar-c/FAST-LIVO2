@@ -353,3 +353,46 @@ G-I3.16 no contamination: PASS — camera/VIO OFF, no P5, no tuning/sweep,
 No tuning, sweep, duplicate bag/mapper, camera/VIO runtime, or P5 path was
 used. Final worktree cleanliness, final HEAD, and push result are recorded by
 the evidence-close commit and the final handoff report.
+
+## Prompt 4 / I3 corrective evidence
+
+The exact Prompt 4 registration is
+`prompts/prob_livo/prompt4_super_input_parity_eee01.md`, SHA256
+`78903883fe3ebaefcbfdc8dcc15b46e534253781e34735110bc00aba9e53b6c0`.
+The complete structured report is
+`spec/prob_livo/PROMPT4_EVIDENCE.md`.
+
+Prompt 4 adds the source-defined `super_ntu_legacy` mode, the in-process
+FAST-LIVO2 offline runner, the Super first-epoch IMU/map-init timing seam, and
+TBB32 offline hot-loop acceleration. The compatibility tests pass G-P4.1,
+G-P4.2, and G-P4.4; the final `prob_livo_p4_tests` result is 201 checks.
+
+The final Super-input run is
+`results/prob_livo/runs/eee01_camera_off_p0_p4_offline_super_input_tbb32_final/`:
+
+```text
+run HEAD: 3eec40cf89d8359bc80cce81979b3d73b6553a67
+bag SHA256: 7ea43946cffdd49c88d993ad3f192a4e90a8f6826eddc2ef1a9d4f5343ca6c17
+rows/matched: 3981 / 3329
+ATE: 0.090995748 m
+trajectory SHA256: d06e472b04f7d304d1462b30b2077766f62bf7047cd4247f909c96b3ca277f03
+callbacks/emitted/attempted/success/reject: 3987/3986/3986/3986/0
+IMU_INIT/MAP_INIT/RUN: 1/4/3981
+pending/discarded LiDAR: 1/0
+```
+
+Strict comparison against the old Super-host trajectory pairs all 3981 rows,
+with zero timestamp delta, translation RMSE/median/max
+`0.03319535524213125/0.03112573966899626/0.07739101605452314 m`, and rotation
+RMSE/median/max
+`0.0019429684341007508/0.002017233514502395/0.009015083200112437 rad`.
+The ATE delta is `+0.0021641939430173396 m` (`+2.436289633781569%`). The
+single classification is `SUPER_INPUT_TRAJECTORY_NEAR_PARITY`.
+
+The historical FAST-native `0.05290159739482509 m` result remains separate.
+It was not the online/offline matched pair. A current online native run and a
+current offline native TBB32 run both produce ATE `0.054502750 m`, 3980 rows,
+3327 matches, and the identical trajectory SHA
+`7149297f46df10ce895fe564dc689b05b3356e6b7c58c03ff92bffd761b93410`; strict
+translation error is zero and rotation error is machine precision. This closes
+the offline reliability control without relabeling the historical result.

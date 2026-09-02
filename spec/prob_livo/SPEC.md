@@ -1,8 +1,9 @@
 # Prob-LIVO Integration Specification
 
-Status: Prompt 3 / I3 camera-OFF Prob-LIO P0–P4 baseline; I0, I1, and I2 are
-closed/owner-verified. I3 is `CLOSED/PASS — Owner audit pending`. The EEE01
-raw-trajectory comparison is `I3_TRAJECTORY_CLOSE_NONIDENTICAL`.
+Status: Prompt 4 / I3 Super-input corrective; I0, I1, and I2 are
+closed/owner-verified. I3 is `CLOSED/PASS — Owner audit pending`. The
+Super-input EEE01 comparison is `SUPER_INPUT_TRAJECTORY_NEAR_PARITY`; the
+historical FAST-native result remains a separate control.
 
 This is the single current-truth authority for the FAST-LIVO2-hosted Prob-LIVO
 integration. Historical notes and future prompts must not redefine these
@@ -311,7 +312,7 @@ no reliance on old build/ or devel/
 | I0 | Host / contract freeze | CLOSED / OWNER VERIFIED |
 | I1 | `ProbESKF19` | CLOSED / OWNER VERIFIED |
 | I2 | Super IMU + undistort under LIVO2 scheduler | CLOSED / OWNER VERIFIED |
-| I3 | Prob-LIO P0–P4 backend, camera OFF | CLOSED/PASS — Owner audit pending; raw comparison `I3_TRAJECTORY_CLOSE_NONIDENTICAL` |
+| I3 | Prob-LIO P0–P4 backend, camera OFF + Super-input corrective | CLOSED/PASS — Owner audit pending; `SUPER_INPUT_TRAJECTORY_NEAR_PARITY` |
 | I4 | `pointWithVar`-compatible current-scan adapter | NOT STARTED |
 | I5 | `ProbPlaneProvider` | NOT STARTED |
 | I6 | camera ON / FAST-LIVO2 visual sequential closure | NOT STARTED |
@@ -722,3 +723,40 @@ percent delta: -40.447290429152716 %
 old matched GT: 3329
 new matched GT: 3016
 ```
+
+## 18. Prompt 4 / I3 — Super-input corrective and offline reliability
+
+The exact Prompt 4 text is registered at
+`prompts/prob_livo/prompt4_super_input_parity_eee01.md`; its SHA256 is
+`78903883fe3ebaefcbfdc8dcc15b46e534253781e34735110bc00aba9e53b6c0`.
+The complete evidence report is `spec/prob_livo/PROMPT4_EVIDENCE.md`.
+
+Prompt 4 adds the source-defined `super_ntu_legacy` input mode and preserves
+`fast_native` as a separate mode. Legacy mode uses source-order Ouster points,
+stride 3, strict `2 m < range < 150 m`, zero LiDAR offset, and the first-epoch
+pre-LiDAR IMU/map-init observation timing. The current host's native
+post-endpoint behavior is kept isolated from this compatibility exception.
+
+The project-owned offline runner is an in-process rosbag record-order reader;
+it constructs and drives the current FAST-LIVO2 `LIVMapper`, scheduler, and
+Prob-LIO backend. It does not call the old Super runtime. TBB owns the offline
+hot loops with `max_allowed_parallelism=32`; the old OpenMP cap of four was
+removed. Camera/VIO and P5 remain disabled.
+
+The final Super-input run completed with 3987 LiDAR callbacks, 3986 scheduler
+epochs, 3986 backend successes, zero rejects, four map-init epochs, 3981 run
+epochs, and 3981 trajectory rows. One final LiDAR callback is explicitly
+pending at EOF because no later IMU endpoint exists. ATE is `0.090995748 m`
+over 3329 matches. Strict old/new comparison pairs all 3981 rows with zero
+timestamp delta; translation RMSE/median/max is
+`0.03319535524213125/0.03112573966899626/0.07739101605452314 m`, and rotation
+RMSE/median/max is
+`0.0019429684341007508/0.002017233514502395/0.009015083200112437 rad`.
+The exact classification is `SUPER_INPUT_TRAJECTORY_NEAR_PARITY`.
+
+The historical FAST-native `0.05290159739482509 m` result is not the current
+online/offline pair. A current online native run and current TBB32 offline
+native run both report `0.054502750 m`, 3980 rows, 3327 matches, and identical
+trajectory SHA `7149297f46df10ce895fe564dc689b05b3356e6b7c58c03ff92bffd761b93410`.
+Strict translation difference is zero and rotation difference is machine
+precision. This is the current offline reliability control.

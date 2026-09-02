@@ -12,6 +12,9 @@ P7 / I7  visual/downsample ablations
 P8 / I8  generalization
 ```
 
+Prompt 4 / I3 is the Super-input parity corrective for `eee_01`; it does not
+start I4.
+
 Stage semantics remain I0–I8 as defined by `spec/prob_livo/SPEC.md`. Future
 prompts may split a production seam, but may not silently change stage
 ownership, the one-state contract, or the P0–P4/P5 boundary.
@@ -27,8 +30,15 @@ The exact Prompt 2 text is registered at
 The exact Prompt 3 text is registered at
 `prompts/prob_livo/prompt3_i2_close_i3_prob_lio_baseline.md`.
 
-Current boundary: I0, I1, and I2 are closed/owner-verified; I3 is
-`CLOSED/PASS — Owner audit pending`. The canonical EEE01 camera-OFF run is classified
-`I3_TRAJECTORY_CLOSE_NONIDENTICAL` with official NTU ATE RMSE
-`0.05290159739482509 m`. Next stage: I4 `pointWithVar`-compatible
-current-scan adapter.
+The exact Prompt 4 text is registered at
+`prompts/prob_livo/prompt4_super_input_parity_eee01.md`.
+
+Current boundary: I0, I1, and I2 are closed/owner-verified; Prompt 4 closes
+the I3 input-semantics corrective as `CLOSED/PASS — Owner audit pending` with
+classification `SUPER_INPUT_TRAJECTORY_NEAR_PARITY`. The historical
+FAST-native `0.05290159739482509 m` result remains separate. Current online and
+offline native control both measure `0.054502750 m` and are strict-consistent.
+Next stage: I4 `pointWithVar`-compatible current-scan adapter.
+
+The complete Prompt 4 report is in
+`spec/prob_livo/PROMPT4_EVIDENCE.md`.

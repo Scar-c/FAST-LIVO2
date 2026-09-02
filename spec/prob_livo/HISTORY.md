@@ -115,3 +115,29 @@ RMSE/median/max `0.01831955642234057 / 0.0092050820666131 /
 I3 is `CLOSED/PASS — Owner audit pending`. The next stage is I4, the
 `pointWithVar`-compatible current-scan adapter; camera-ON visual closure is
 still reserved for I6.
+
+## Prompt 4 / I3 corrective — Super-input parity and offline control
+
+Prompt 4 registered the exact owner prompt and repaired the I3 experimental
+control. The host now has explicit `fast_native` and `super_ntu_legacy` input
+semantics. The latter reproduces the legacy Ouster source-index stride, strict
+2--150 m range, source order, zero LiDAR offset, and Super startup/map-init
+timing inside the current FAST-LIVO2 scheduler. It does not invoke the legacy
+Super runtime.
+
+The in-process offline runner reads the bag in record order and feeds the same
+FAST-LIVO2 callbacks, scheduler, and Prob-LIO backend interfaces. Its hot loops
+use TBB with offline parallelism capped at 32; OpenMP is no longer capped at
+four. The final Super-input run completed with 3987 LiDAR callbacks, 3986
+emitted/attempted/successful epochs, one pending EOF LiDAR callback, and
+3981 trajectory rows. The official evaluator reported ATE RMSE
+`0.090995748 m` over 3329 matches. Strict comparison to the old Super-host
+trajectory paired all 3981 rows with zero timestamp delta and was classified
+exactly once as `SUPER_INPUT_TRAJECTORY_NEAR_PARITY`; the residual is
+identified as a host/backend numerical seam.
+
+The historical FAST-native `0.05290159739482509 m` result remains separately
+classified and was not an online/offline pair. A current online native run and
+current TBB32 offline native run both report `0.054502750 m`, 3980 rows, and
+the identical trajectory SHA; translation strict error is zero and rotation is
+machine precision. I4 remains not started.
