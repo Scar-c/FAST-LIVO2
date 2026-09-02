@@ -123,6 +123,28 @@ add_library(lio src/voxel_map.cpp)
 add_library(pre src/preprocess.cpp)
 add_library(imu_proc src/IMU_Processing.cpp)
 add_library(laser_mapping src/LIVMapper.cpp)
+add_library(prob_livo_eskf src/prob_livo/prob_eskf19.cpp)
+
+# I1's filter core is deliberately a non-wired library.  The executable keeps
+# the existing FAST-LIVO2 runtime path until the later scheduler-owned stages.
+add_executable(prob_livo_i1_tests
+  tests/prob_livo/test_i1_main.cpp
+  tests/prob_livo/test_i1_layout.cpp
+  tests/prob_livo/test_i1_retraction.cpp
+  tests/prob_livo/test_i1_predict.cpp
+  tests/prob_livo/test_i1_update.cpp
+  tests/prob_livo/test_i1_exposure.cpp
+)
+target_include_directories(prob_livo_i1_tests PRIVATE tests/prob_livo)
+target_link_libraries(prob_livo_i1_tests
+  prob_livo_eskf
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Sophus_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${OpenMP_CXX_FLAGS}
+)
 
 # Add the main executable
 add_executable(fastlivo_mapping src/main.cpp)
