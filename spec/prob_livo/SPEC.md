@@ -1,7 +1,7 @@
 # Prob-LIVO Integration Specification
 
-Status: Prompt 1 / I1 filter core; I0 is `CLOSED / OWNER VERIFIED` and I1 is
-`CLOSED/PASS — Owner audit pending`.
+Status: Prompt 2 / I2 IMU adapter; I0 and I1 are `CLOSED / OWNER VERIFIED`
+and I2 is `ACTIVE`.
 
 This is the single current-truth authority for the FAST-LIVO2-hosted Prob-LIVO
 integration. Historical notes and future prompts must not redefine these
@@ -133,7 +133,7 @@ not to change before the listed stage.
 |---|---|---|---|---|---|---|---|
 | H0 | scheduler / scan recombination | `LIVMapper::run`, `sync_packages` | unchanged FAST-LIVO2 shell | IMU/LIO/VIO handlers | FAST-LIVO2 `src/LIVMapper.cpp:534-552,884-1030` | I0/I2 | FROZEN |
 | H1 | shared `StatesGroup` / x19-P19 | `StatesGroup` | `ProbESKF19` in host ABI | scheduler, LIO, VIO | FAST-LIVO2 `include/common_lib.h:126-206` plus I1 contract | I1 | FROZEN ABI |
-| H2 | IMU propagation / undistortion | `ImuProcess::Process2`, `UndistortPcl` | Super-native IMU adapter under H0 | current scan packet | FAST-LIVO2 shell + Super `Propagation_Undistort` semantics | I2 | NOT STARTED |
+| H2 | IMU propagation / undistortion | `ImuProcess::Process2`, `UndistortPcl` | Super-native IMU adapter under H0 | current scan packet | FAST-LIVO2 shell + Super `Propagation_Undistort` semantics | I2 | ACTIVE |
 | H3 | LiDAR downsample | PCL `VoxelGrid` in `handleLIO` | Super `VoxelGridClosest` | OctVox/backend | Super `VoxelGridFilter.h:15-80` | I3 | NOT STARTED |
 | H4 | compact map insertion/storage | FAST `VoxelMapManager` octree | Prob `OctVox` | HKNN, plane provider | Super `OctVoxMap.hpp:104-210,417-467` | I3 | NOT STARTED |
 | H5 | HKNN | FAST local voxel lookup/recursion | Super HKNN | QR and association | Super `OctVoxMap.hpp:470-553`, `HKNN_list60_gem.h` | I3 | NOT STARTED |

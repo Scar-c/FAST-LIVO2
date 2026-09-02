@@ -20,3 +20,6 @@ Prompt 0 is complete at bootstrap only. Next stage: I1 `ProbESKF19`.
 
 The exact Prompt 1 text is registered at
 `prompts/prob_livo/prompt1_prob_eskf19.md`.
+
+The exact Prompt 2 text is registered at
+`prompts/prob_livo/prompt2_i1_close_i2_super_imu.md`.
