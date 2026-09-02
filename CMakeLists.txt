@@ -156,6 +156,8 @@ add_executable(prob_livo_i2_tests
   tests/prob_livo/test_i2_imu.cpp
   tests/prob_livo/test_i2_undistort.cpp
   tests/prob_livo/test_i2_continuity.cpp
+  tests/prob_livo/test_i2_lifecycle_handoff.cpp
+  tests/prob_livo/test_i2_scheduler_imu_buffer.cpp
 )
 target_include_directories(prob_livo_i2_tests PRIVATE tests/prob_livo)
 target_link_libraries(prob_livo_i2_tests

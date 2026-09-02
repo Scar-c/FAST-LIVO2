@@ -210,8 +210,8 @@ int RunI2PropagationTests(TestContext &context) {
   CheckState(context, oracle.state, host, "i2.propagation.final_state", 2e-11);
   CheckPhysicalCovariance(context, oracle.state.covariance, host.cov,
                           "i2.propagation.final_covariance", 2e-10);
-  context.Check(std::abs(packet.last_lio_update_time - 200.52) < 1e-12,
-                "adapter did not advance last_lio_update_time exactly once");
+  context.Check(std::abs(packet.last_lio_update_time - 200.49) < 1e-12,
+                "adapter incorrectly owned the scheduler anchor");
 
   // Endpoint between samples: no-lookahead is rejected before propagation;
   // the explicit non-consuming look-ahead then produces the clipped endpoint.
@@ -252,8 +252,8 @@ int RunI2PropagationTests(TestContext &context) {
                 "partial endpoint look-ahead did not clip to epoch end");
   context.Check(std::abs(partial_filter.last_imu_time() - 300.52) < 1e-12,
                 "partial endpoint did not retain Super look-ahead history");
-  context.Check(std::abs(partial_packet.last_lio_update_time - 300.515) < 1e-12,
-                "partial endpoint advanced scheduler anchor incorrectly");
+  context.Check(std::abs(partial_packet.last_lio_update_time - 300.49) < 1e-12,
+                "partial endpoint mutated scheduler anchor");
   return context.Passed() ? 0 : 1;
 }
 

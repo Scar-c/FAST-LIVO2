@@ -2,6 +2,7 @@
 #define PROB_LIVO_PROB_IMU_ADAPTER_H_
 
 #include "prob_livo/prob_eskf19.h"
+#include "prob_livo/prob_lio_lifecycle.h"
 
 #include <cstddef>
 #include <cstdint>

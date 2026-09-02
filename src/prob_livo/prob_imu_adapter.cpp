@@ -271,10 +271,8 @@ ProbImuAdapter::Result ProbImuAdapter::ProcessLioEpoch(
     return result;
   }
 
-  // This is the sole adapter-side advancement.  The FAST scheduler does not
-  // advance the field in sync_packages, so an unsuccessful epoch cannot
-  // move the continuity anchor.
-  measures.last_lio_update_time = timing.epoch_end;
+  // Scheduler anchor ownership belongs to ProbLioLifecycleAuthority.  The
+  // adapter only returns a successful result; failed epochs never move it.
   result.success = true;
   result.initialized = true;
   result.propagated = true;

@@ -40,7 +40,7 @@ int RunI2ContinuityTests(TestContext &context) {
                   name + " failed sequential propagation");
     context.Check(std::abs(result.epoch_start - start) < 1e-12 &&
                       std::abs(result.epoch_end - end) < 1e-12 &&
-                      std::abs(packet.last_lio_update_time - end) < 1e-12,
+                      std::abs(packet.last_lio_update_time - start) < 1e-12,
                   name + " changed the epoch anchor incorrectly");
     if (epoch > 0) {
       context.Check(std::abs(adapter.propagation_trace().front().timestamp -
@@ -115,7 +115,7 @@ int RunI2ContinuityTests(TestContext &context) {
                     livo_result.prob_scan_undistort_imu->size() == 1,
                 "camera-cut seam did not consume current points only");
   context.Check(std::abs(livo_filter.current_time() - image_time) < 1e-12 &&
-                    std::abs(livo_packet.last_lio_update_time - image_time) <
+                    std::abs(livo_packet.last_lio_update_time - livo_start) <
                         1e-12,
                 "camera-cut seam did not reach image endpoint");
   context.Check(std::abs(livo_result.prob_scan_undistort_imu->points.front()

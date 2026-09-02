@@ -12,6 +12,7 @@ which is included as part of this source code package.
 
 #include "LIVMapper.h"
 #include "prob_livo/prob_imu_adapter.h"
+#include "prob_livo/prob_lio_lifecycle.h"
 
 LIVMapper::LIVMapper(ros::NodeHandle &nh)
     : extT(0, 0, 0),
@@ -915,19 +916,20 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
 
     struct MeasureGroup m; // standard method to keep imu message.
 
-    m.imu.clear();
     m.lio_time = meas.lidar_frame_end_time;
     mtx_buffer.lock();
-    while (!imu_buffer.empty())
-    {
-      if (imu_buffer.front()->header.stamp.toSec() > meas.lidar_frame_end_time) break;
-      m.imu.push_back(imu_buffer.front());
-      imu_buffer.pop_front();
-    }
+    prob_livo::SchedulerImuSelection selection;
+    const bool imu_selection_ok = prob_livo::ConsumeSchedulerImuEpoch(
+        imu_buffer, meas.last_lio_update_time, meas.lidar_frame_end_time,
+        selection);
+    m.imu = std::move(selection.current);
+    meas.imu_lookahead = selection.lookahead;
     lid_raw_data_buffer.pop_front();
     lid_header_time_buffer.pop_front();
     mtx_buffer.unlock();
     sig_buffer.notify_all();
+
+    if (!imu_selection_ok) return false;
 
     meas.lio_vio_flg = LIO; // process lidar topic, so timestamp should be lidar scan end.
     meas.measures.push_back(m);

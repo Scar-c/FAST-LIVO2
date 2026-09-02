@@ -80,6 +80,9 @@ struct LidarMeasureGroup
   PointCloudXYZI::Ptr lidar;
   PointCloudXYZI::Ptr pcl_proc_cur;
   PointCloudXYZI::Ptr pcl_proc_next;
+  // Scheduler-owned first IMU strictly after the current LIO endpoint.
+  // It is observed by the backend but remains buffered for the next epoch.
+  sensor_msgs::Imu::ConstPtr imu_lookahead;
   deque<struct MeasureGroup> measures;
   EKF_STATE lio_vio_flg;
   int lidar_scan_index_now;
@@ -93,6 +96,7 @@ struct LidarMeasureGroup
     this->lidar.reset(new PointCloudXYZI());
     this->pcl_proc_cur.reset(new PointCloudXYZI());
     this->pcl_proc_next.reset(new PointCloudXYZI());
+    this->imu_lookahead.reset();
     this->measures.clear();
     lidar_scan_index_now = 0;
     last_lio_update_time = -1.0;
