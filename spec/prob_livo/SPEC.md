@@ -1,7 +1,7 @@
 # Prob-LIVO Integration Specification
 
-Status: Prompt 2 / I2 IMU adapter; I0 and I1 are `CLOSED / OWNER VERIFIED`
-and I2 is `ACTIVE`.
+Status: Prompt 2 / I2 IMU adapter; I0, I1, and I2 are closed, with I2 at
+`CLOSED/PASS — Owner audit pending`.
 
 This is the single current-truth authority for the FAST-LIVO2-hosted Prob-LIVO
 integration. Historical notes and future prompts must not redefine these
@@ -133,7 +133,7 @@ not to change before the listed stage.
 |---|---|---|---|---|---|---|---|
 | H0 | scheduler / scan recombination | `LIVMapper::run`, `sync_packages` | unchanged FAST-LIVO2 shell | IMU/LIO/VIO handlers | FAST-LIVO2 `src/LIVMapper.cpp:534-552,884-1030` | I0/I2 | FROZEN |
 | H1 | shared `StatesGroup` / x19-P19 | `StatesGroup` | `ProbESKF19` in host ABI | scheduler, LIO, VIO | FAST-LIVO2 `include/common_lib.h:126-206` plus I1 contract | I1 | FROZEN ABI |
-| H2 | IMU propagation / undistortion | `ImuProcess::Process2`, `UndistortPcl` | Super-native IMU adapter under H0 | current scan packet | FAST-LIVO2 shell + Super `Propagation_Undistort` semantics | I2 | ACTIVE |
+| H2 | IMU propagation / undistortion | `ImuProcess::Process2`, `UndistortPcl` | `ProbImuAdapter` under H0 | future Prob-LIO scan input | FAST-LIVO2 scheduler + Super `ESKF::Predict`/`Propagation_Undistort` | I2 | CLOSED/PASS — Owner audit pending |
 | H3 | LiDAR downsample | PCL `VoxelGrid` in `handleLIO` | Super `VoxelGridClosest` | OctVox/backend | Super `VoxelGridFilter.h:15-80` | I3 | NOT STARTED |
 | H4 | compact map insertion/storage | FAST `VoxelMapManager` octree | Prob `OctVox` | HKNN, plane provider | Super `OctVoxMap.hpp:104-210,417-467` | I3 | NOT STARTED |
 | H5 | HKNN | FAST local voxel lookup/recursion | Super HKNN | QR and association | Super `OctVoxMap.hpp:470-553`, `HKNN_list60_gem.h` | I3 | NOT STARTED |
@@ -448,6 +448,12 @@ iteration-count/`need_converge` behavior, final rotational covariance reset, and
 symmetrization. The 6x6 callback cannot directly measure exposure; exposure can
 only respond through existing P_xe coupling.
 
+The production observation callback explicitly receives
+`(state, need_converge, HT_Vinv_H, HT_Vinv_r)`. The corrective lifecycle is
+`[false,false]` for a two-callback update and
+`[false,false,false,true]` for a four-callback update, matching the canonical
+Super callback phase before the measurement producer runs.
+
 ### 14.3 Independent oracle and tests
 
 `tests/prob_livo/oracle/super_eskf_oracle.h` is a minimal test-only translation
@@ -497,12 +503,13 @@ final-reset error `2.20e-3`), demonstrating that the tests discriminate the
 required semantics. I1 makes no scheduler integration, VIO behavior change,
 OctVox/P1–P4 import, P5 use, bag run, or dataset accuracy claim.
 
-The current state after successful completion is:
+The I1 state after successful completion is:
 
 ```text
 I0 = CLOSED / OWNER VERIFIED
-I1 = CLOSED/PASS — Owner audit pending
-I2–I8 = NOT STARTED
+I1 = CLOSED / OWNER VERIFIED
+I2 = the next stage after this historical I1 boundary
+I3–I8 = NOT STARTED
 
 FAST-LIVO2 StatesGroup ABI = preserved
 ProbESKF19 LIO semantics   = canonical Super ESKF
@@ -512,4 +519,94 @@ runtime integration        = NOT STARTED
 Next stage = I2 Super IMU + undistortion under FAST-LIVO2 scheduler
 ```
 
-Do not begin I2 from this stage.
+Prompt 2 supersedes this historical boundary.
+
+## 16. Prompt 2 / I2 — Super-native IMU and undistortion adapter
+
+I2 closes the scheduler-owned H2 seam without replacing FAST's LiDAR map or
+visual runtime. `include/prob_livo/prob_imu_adapter.h` and
+`src/prob_livo/prob_imu_adapter.cpp` provide `ProbImuAdapter`, which accepts a
+`LidarMeasureGroup`, uses the caller-owned `ProbESKF19`/`StatesGroup`, and
+returns the explicitly named `prob_scan_undistort_imu` cloud. The adapter has
+no second nominal pose or covariance.
+
+### 16.1 Scheduler contract
+
+The active `LIVMapper::sync_packages` source remains the scheduler authority:
+
+| Mode | State epoch start | State epoch end | Point-time origin | IMU boundary |
+|---|---|---|---|---|
+| ONLY_LIO | `last_lio_update_time` (first initialized from scan header) | `measures.back().lio_time == lidar_frame_end_time` | `lidar_frame_beg_time` because raw curvature stays scan-header-relative | consume only `stamp <= lidar_frame_end_time` |
+| LIVO LIO | `last_lio_update_time` | `measures.back().lio_time == image_capture_time` | `last_lio_update_time` because production cut rebases current points | collect only `stamp <= image_capture_time`; current points are pre-cut |
+
+The LIVO current/next rebase expression is centralized in
+`prob_livo::RebaseLivoPoint`, and production `sync_packages` calls that helper.
+The adapter validates finite times, monotonic IMU input, current-point time
+range, and the current/next boundary. It advances
+`last_lio_update_time` exactly once, only after propagation and undistortion
+success.
+
+### 16.2 Super endpoint decision
+
+The reference `SuperLIO::Propagation_Undistort()` calls `SetObsTime` with
+`lidar.end_time` and passes its buffered IMUs to `ESKF::Predict`. The reference
+`Predict` clips a sample whose timestamp is after `current_obs_time` to the
+observation endpoint while retaining that sample as IMU history. FAST's
+`sync_packages` consumes through `<=` endpoint and leaves newer samples in its
+buffer, so H2 exposes an optional non-consuming look-ahead sample to the
+adapter. If a final partial interval is required and the sample is absent, the
+adapter rejects the epoch before mutating state; it never stops at the last
+pre-endpoint sample.
+
+### 16.3 Initialization, trace, and output
+
+Initialization follows `SuperLIO::kf_init`: incremental mean gyro/acceleration,
+minimum 50 samples, `gravity = -mean_accel * gravity_norm / ||mean_accel||`,
+gyro bias equal to mean gyro, acceleration scale, gravity alignment, yaw and
+robot-origin transforms, Super initial physical covariance, and the last IMU
+timestamp in the accepted initialization measure. Exposure mean/covariance
+remains the host visual state.
+
+`ProbESKF19::Predict` now exposes accepted `PropagationSnapshot` values
+`(time,R,p,v,a,w)` from its own state transition. The adapter records those
+snapshots and uses no parallel trajectory. Undistortion applies the canonical
+quaternion slerp, `p_h + v_h*tau + 0.5*a_t*tau^2`, configured LiDAR→IMU
+extrinsic, and inverse endpoint pose. Its frame is scan-end IMU/body frame.
+
+### 16.4 I2 gate ledger
+
+| Gate | Invariant / authority / evidence | Negative fixture | Result |
+|---|---|---|---|
+| G-P2.0 | baseline `ecd8058`, existing I1 focused test, overlaid full build before edits | no source changes before baseline | PASS |
+| G-I1.C1 | direct callback bool; `[F,F]`, `[F,F,F,T]`; independent Super oracle and final query | always-false, delayed, after-callback, indirect-state lifecycle mutations | PASS |
+| G-I1.C2 | all I1 math gates remain green; actual Super SO(3) golden max matrix error `1.06e-7`, log error `6.67e-8` | linear SO(3) mutation and all prior I1 adversarial fixtures | PASS |
+| G-I2.1 | production-used scheduler rebase helper; ONLY/LIVO origins, cut partition, boundary and source guard | header-origin, camera-as-both-origin, post-cut-current | PASS |
+| G-I2.2 | exact endpoint and clipped partial endpoint; physical state/covariance parity, transactional missing-lookahead rejection | stop at last IMU; no look-ahead; post-endpoint IMU | PASS |
+| G-I2.3 | level/tilted/scaled acceleration, bias, 50-sample transition, yaw/origin transform; init physical covariance parity | early init, hardcoded gravity, skipped transform | PASS |
+| G-I2.4 | every accepted ProbESKF19 snapshot compared for time/R/p/v/a/w; max error `0` in deterministic oracle fixture | post-rotation acceleration ordering | PASS |
+| G-I2.5 | no/pure translation/pure rotation/coupled motion, endpoints, midpoint, nonidentity extrinsic; max XYZ `2.05e-7` | LiDAR-frame, missing/inverted extrinsic, linear rotation, FAST formula | PASS |
+| G-I2.6 | point count/order, intensity, curvature, normals and current/next identity preserved | timestamp sorting/identity loss | PASS |
+| G-I2.7 | three sequential epochs, exact boundary continuity, one anchor advance per success | double integration, dropped gap, early anchor update | PASS |
+| G-I2.8 | source points cross camera time through production rebase helper; current-only packet reaches image endpoint | post-cut point contamination | PASS |
+| G-I2.9 | source guard confirms default `p_imu->Process2` path and no adapter output/ProcessLioEpoch call in `LIVMapper` | direct Prob IMU-frame → FAST `feats_undistort`/VoxelMap wiring | PASS |
+
+Focused I2 tests are in `tests/prob_livo/test_i2_*` and use an independent
+oracle from reference commit `9fc949f46291c0fa76e5b7cdb372c940eb4b3f6e`.
+No bag, OctVox, P1–P4 backend, VIO behavior, or I3 work is included.
+
+The current stage state is:
+
+```text
+I0 = CLOSED / OWNER VERIFIED
+I1 = CLOSED / OWNER VERIFIED
+I2 = CLOSED/PASS — Owner audit pending
+I3–I8 = NOT STARTED
+
+H0 FAST scheduler             = preserved
+H1 shared x19/P19             = ProbESKF19
+H2 IMU init/prop/undistortion = Super-native ProbImuAdapter
+I2 output frame               = scan-end IMU frame
+Prob-LIO map backend          = NOT STARTED
+
+Next stage = I3 Prob-LIO P0–P4 backend + camera-OFF baseline
+```

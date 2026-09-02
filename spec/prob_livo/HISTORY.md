@@ -38,3 +38,33 @@ exposure is frozen by default and has an explicit host-compatible random walk
 option. A separately implemented test-only Super oracle covers dense covariance
 and adversarial negative fixtures. The host runtime remains untouched, and the
 next stage remains I2 scheduler-owned IMU/undistortion work.
+
+## Prompt 2 / I1 corrective and I2 — Super-native IMU seam
+
+The I1 close exposed one semantic defect: the production observation callback
+did not carry Super's `need_converge` phase into the measurement producer.
+`ProbESKF19::UpdateObserve` now passes that bool directly before every
+callback. The corrective test records `[F,F]` and `[F,F,F,T]` against an
+independent Super oracle and keeps the prior I1 state/covariance parity
+fixtures unchanged.
+
+The FAST scheduler remains H0 authority. ONLY_LIO ends at the scan end and
+LIVO ends at the image capture time; LIVO point curvature is rebased by the
+production cut helper, and `last_lio_update_time` is advanced only after a
+successful adapter epoch. The camera cut and current/next partition therefore
+remain FAST semantics.
+
+H2 now has a production-ready, non-wired `ProbImuAdapter`. It replaces FAST's
+IMU initialization, propagation, and backward-undistortion authority for the
+future Prob-LIO path with Super's mean initialization, gravity/yaw/robot
+alignment, midpoint ESKF, endpoint clipping, propagation trace, quaternion
+slerp, and translational interpolation. Because FAST consumes IMUs only up to
+the endpoint, the adapter makes the required Super look-ahead explicit and
+rejects incomplete final coverage instead of silently stopping early.
+
+The adapter's output is deliberately named `prob_scan_undistort_imu` and is
+expressed in the scan-end IMU/body frame. It is not connected to FAST's
+LiDAR-frame `feats_undistort` or `VoxelMapManager`; the default runtime stays
+on FAST `Process2` until I3 supplies the matching Prob-LIO map backend. No
+OctVox/P1–P4, VIO change, camera runtime, bag run, or I3 work belongs to this
+stage.

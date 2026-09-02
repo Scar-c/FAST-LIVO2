@@ -23,3 +23,7 @@ The exact Prompt 1 text is registered at
 
 The exact Prompt 2 text is registered at
 `prompts/prob_livo/prompt2_i1_close_i2_super_imu.md`.
+
+Current boundary: I0 and I1 are closed/owner-verified; I2 is
+`CLOSED/PASS — Owner audit pending`. Next stage: I3 Prob-LIO P0–P4 backend
+with the camera-OFF baseline.

@@ -2,8 +2,9 @@
 
 Prompt 0 evidence is source identity, source audit, build output, and file
 inventory only. No bag-run or accuracy evidence is claimed. Prompt 1 evidence
-adds deterministic filter-core parity and host-build gates; it still claims no
-bag-run evidence.
+adds deterministic filter-core parity and host-build gates. Prompt 2 evidence
+adds the terminal callback corrective and deterministic Super-native
+IMU/undistortion seam tests; it still claims no bag-run evidence.
 
 ## Repository identity
 
@@ -139,3 +140,84 @@ Final evidence-close commit: recorded by `git rev-parse HEAD` after this update
 Final worktree: verified clean before push
 Push status: fast-forward push to origin/prob-livo follows final verification
 ```
+
+## Prompt 2 / I1 corrective + I2 evidence
+
+```text
+Prompt 2 source: /home/lc/super_livo/prompts/prompt2_i1_close_i2_super_imu.md
+Prompt registration: prompts/prob_livo/prompt2_i1_close_i2_super_imu.md
+Prompt registration SHA256: cc601777aa8529da675eaa5afcaa7f877d1d12f543f746ee7773c9fa20964888
+Prompt 2 start HEAD: ecd8058f08bcae987f3d87934f237964409773bf
+I1 corrective SHA: a3458c6 (fix callback lifecycle seam)
+I2 implementation/test SHA: 689e0d3
+Reference SHA: 9fc949f46291c0fa76e5b7cdb372c940eb4b3f6e
+```
+
+Before edits, `G-P2.0` passed at the Owner frontier: the existing
+`prob_livo_i1_tests` returned `0` and the overlaid command
+`source /home/lc/design_ws/devel/setup.bash && catkin_make --pkg fast_livo`
+returned `0` from `/home/lc/super_livo`.
+
+The I1 callback corrective is direct: `UpdateObserve` passes
+`need_converge` into the observation callback before it runs. The production
+and independent Super-oracle sequences are `[F,F]` and `[F,F,F,T]`; the
+existing numerical I1 envelope remains green. Actual Super SO(3) golden
+fixtures were generated from `src/basic/src/Manifold.cpp` at the reference
+SHA. Maximum observed errors are matrix `1.0541e-7`, log `6.6698e-8`, and
+round-trip `5.55e-17`.
+
+### I2 source audit
+
+```text
+FAST scheduler: src/LIVMapper.cpp:884-1030
+  ONLY_LIO end = lidar_frame_end_time; IMU consume <= end; raw curvature is
+  scan-header-relative.
+  LIVO end = image_capture_time; IMU consume <= image time; current points
+  are rebased to prior last_lio_update_time and next points to image time.
+FAST packet/types: include/common_lib.h:62-100
+FAST IMU entry: src/LIVMapper.cpp:248-265 (existing Process2 path)
+Super init: src/super_lio/src/lio/super_lio.cpp:120-165
+Super endpoint/undistort: src/super_lio/src/lio/super_lio.cpp:384-449
+Super Predict: src/super_lio/src/lio/ESKF.cpp:187-247
+```
+
+The canonical wrapper sets the observation endpoint to `lidar.end_time` and
+passes its IMU sequence to `ESKF::Predict`; a sample beyond the endpoint is
+used to form the clipped final interval while remaining in IMU history. FAST
+does not expose that sample inside the consumed measure, so `ProbImuAdapter`
+requires an explicit non-consuming look-ahead only when needed. Missing
+coverage is rejected before state mutation.
+
+### I2 focused evidence
+
+```bash
+/home/lc/super_livo/devel/lib/fast_livo/prob_livo_i1_tests
+/home/lc/super_livo/devel/lib/fast_livo/prob_livo_i2_tests
+```
+
+Both returned `0`. I2 reports PASS for G-I2.1 through G-I2.9. Initialization
+state/covariance and propagated physical state/covariance errors are zero in
+the deterministic double-precision oracle fixture. The accepted trace
+`(time,R,p,v,a,w)` maximum error is `0`. Maximum undistorted XYZ error across
+no-motion, translation, rotation, coupled-motion, endpoint, midpoint, and
+nonidentity-extrinsic cases is `2.0415e-7`, within the float point-cloud
+storage tolerance.
+
+The LIVO scheduler helper is production-used by `sync_packages`; tests verify
+pre/post-camera partition, the two curvature origins, `<= lio_time` IMU
+ownership, and source-level helper use. Three consecutive epochs verify
+single advancement of `last_lio_update_time`. A source guard confirms no
+`ProcessLioEpoch` or `prob_scan_undistort_imu` call is present in
+`LIVMapper.cpp`, while the existing `p_imu->Process2` path remains.
+
+Final build:
+
+```bash
+source /home/lc/design_ws/devel/setup.bash
+catkin_make --pkg fast_livo
+```
+
+Return code: `0`. No rosbag or dataset was run. No OctVox/P1–P4 backend, VIO
+behavior, camera runtime, or I3 work was started. `include/common_lib.h` and
+`src/vio.cpp` remain unchanged from the I2 start. Final worktree cleanliness,
+final HEAD, and push result are recorded after the close commit below.
