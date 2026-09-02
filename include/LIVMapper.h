@@ -21,6 +21,10 @@ which is included as part of this source code package.
 #include <nav_msgs/Path.h>
 #include <vikit/camera_loader.h>
 
+namespace prob_livo {
+class ProbLioBackend;
+}
+
 class LIVMapper
 {
 public:
@@ -35,6 +39,7 @@ public:
   void stateEstimationAndMapping();
   void handleVIO();
   void handleLIO();
+  void handleProbLio();
   void savePCD();
   void processImu();
   
@@ -158,6 +163,12 @@ public:
   ImuProcessPtr p_imu;
   VoxelMapManagerPtr voxelmap_manager;
   VIOManagerPtr vio_manager;
+
+  // Prompt-3 camera-OFF backend switch.  The backend owns the ProbESKF19,
+  // lifecycle and Super-native map; LIVMapper remains the ROS shell.
+  bool prob_livo_backend_enabled_ = false;
+  std::string prob_livo_trajectory_path_;
+  std::unique_ptr<prob_livo::ProbLioBackend> prob_livo_backend_;
 
   ros::Publisher plane_pub;
   ros::Publisher voxel_pub;

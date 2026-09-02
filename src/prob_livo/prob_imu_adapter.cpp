@@ -184,10 +184,15 @@ ProbImuAdapter::Result ProbImuAdapter::ProcessLioEpoch(
     SetFailure(result, "initialized adapter has no ProbESKF19 IMU history");
     return result;
   }
-  if (std::abs(filter.current_time() - timing.epoch_start) >
-      options_.time_tolerance) {
+  // Super's map-init consumes raw scans without propagating the ESKF.  At the
+  // first RUN epoch the filter therefore legitimately still carries the
+  // timestamp of the last IMU accepted during kf_init.  Reject only a filter
+  // that is ahead of the scheduler epoch; Predict() uses the observation
+  // window to bridge this initialization-to-runtime gap exactly once.
+  if (filter.current_time() > timing.epoch_start +
+                                  options_.time_tolerance) {
     SetFailure(result,
-               "ProbESKF19 state is not aligned with scheduler epoch start");
+               "ProbESKF19 state is ahead of scheduler epoch start");
     return result;
   }
 

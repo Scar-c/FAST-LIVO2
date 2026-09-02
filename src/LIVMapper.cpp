@@ -13,6 +13,7 @@ which is included as part of this source code package.
 #include "LIVMapper.h"
 #include "prob_livo/prob_imu_adapter.h"
 #include "prob_livo/prob_lio_lifecycle.h"
+#include "prob_livo/prob_lio_backend.h"
 
 LIVMapper::LIVMapper(ros::NodeHandle &nh)
     : extT(0, 0, 0),
@@ -57,6 +58,9 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
   nh.param<int>("common/img_en", img_en, 1);
   nh.param<int>("common/lidar_en", lidar_en, 1);
   nh.param<string>("common/img_topic", img_topic, "/left_camera/image");
+  nh.param<bool>("common/prob_livo_backend", prob_livo_backend_enabled_, false);
+  nh.param<string>("common/prob_livo_trajectory_path",
+                  prob_livo_trajectory_path_, "");
 
   nh.param<bool>("vio/normal_en", normal_en, true);
   nh.param<bool>("vio/inverse_composition_en", inverse_composition_en, false);
@@ -127,26 +131,29 @@ void LIVMapper::initializeComponents()
   voxelmap_manager->extT_ << VEC_FROM_ARRAY(extrinT);
   voxelmap_manager->extR_ << MAT_FROM_ARRAY(extrinR);
 
-  if (!vk::camera_loader::loadFromRosNs("laserMapping", vio_manager->cam)) throw std::runtime_error("Camera model not correctly specified.");
+  if (img_en)
+  {
+    if (!vk::camera_loader::loadFromRosNs("laserMapping", vio_manager->cam)) throw std::runtime_error("Camera model not correctly specified.");
 
-  vio_manager->grid_size = grid_size;
-  vio_manager->patch_size = patch_size;
-  vio_manager->outlier_threshold = outlier_threshold;
-  vio_manager->setImuToLidarExtrinsic(extT, extR);
-  vio_manager->setLidarToCameraExtrinsic(cameraextrinR, cameraextrinT);
-  vio_manager->state = &_state;
-  vio_manager->state_propagat = &state_propagat;
-  vio_manager->max_iterations = max_iterations;
-  vio_manager->img_point_cov = IMG_POINT_COV;
-  vio_manager->normal_en = normal_en;
-  vio_manager->inverse_composition_en = inverse_composition_en;
-  vio_manager->raycast_en = raycast_en;
-  vio_manager->grid_n_width = grid_n_width;
-  vio_manager->grid_n_height = grid_n_height;
-  vio_manager->patch_pyrimid_level = patch_pyrimid_level;
-  vio_manager->exposure_estimate_en = exposure_estimate_en;
-  vio_manager->colmap_output_en = colmap_output_en;
-  vio_manager->initializeVIO();
+    vio_manager->grid_size = grid_size;
+    vio_manager->patch_size = patch_size;
+    vio_manager->outlier_threshold = outlier_threshold;
+    vio_manager->setImuToLidarExtrinsic(extT, extR);
+    vio_manager->setLidarToCameraExtrinsic(cameraextrinR, cameraextrinT);
+    vio_manager->state = &_state;
+    vio_manager->state_propagat = &state_propagat;
+    vio_manager->max_iterations = max_iterations;
+    vio_manager->img_point_cov = IMG_POINT_COV;
+    vio_manager->normal_en = normal_en;
+    vio_manager->inverse_composition_en = inverse_composition_en;
+    vio_manager->raycast_en = raycast_en;
+    vio_manager->grid_n_width = grid_n_width;
+    vio_manager->grid_n_height = grid_n_height;
+    vio_manager->patch_pyrimid_level = patch_pyrimid_level;
+    vio_manager->exposure_estimate_en = exposure_estimate_en;
+    vio_manager->colmap_output_en = colmap_output_en;
+    vio_manager->initializeVIO();
+  }
 
   p_imu->set_extrinsic(extT, extR);
   p_imu->set_gyr_cov_scale(V3D(gyr_cov, gyr_cov, gyr_cov));
@@ -162,6 +169,26 @@ void LIVMapper::initializeComponents()
   if (!exposure_estimate_en) p_imu->disable_exposure_est();
 
   slam_mode_ = (img_en && lidar_en) ? LIVO : imu_en ? ONLY_LIO : ONLY_LO;
+
+  if (prob_livo_backend_enabled_)
+  {
+    if (slam_mode_ != ONLY_LIO)
+      throw std::runtime_error("Prob-LIO backend requires camera-OFF ONLY_LIO mode");
+    prob_livo::ProbLioBackend::Options options;
+    options.gravity_norm = 9.7946;
+    options.imu_gyro_variance = 0.1;
+    options.imu_accelerometer_variance = 0.1;
+    options.imu_gyro_bias_variance = 0.0001;
+    options.imu_accelerometer_bias_variance = 0.0001;
+    options.map_resolution = voxelmap_manager->config_setting_.max_voxel_size_;
+    options.voxel_size = voxelmap_manager->config_setting_.max_voxel_size_;
+    options.lidar_depth_error = voxelmap_manager->config_setting_.dept_err_;
+    options.lidar_beam_error_deg = voxelmap_manager->config_setting_.beam_err_;
+    options.lidar_to_imu_rotation = extR;
+    options.lidar_to_imu_translation = extT;
+    options.trajectory_path = prob_livo_trajectory_path_;
+    prob_livo_backend_.reset(new prob_livo::ProbLioBackend(_state, options));
+  }
 }
 
 void LIVMapper::initializeFiles() 
@@ -197,7 +224,7 @@ void LIVMapper::initializeSubscribersAndPublishers(ros::NodeHandle &nh, image_tr
             nh.subscribe(lid_topic, 200000, &LIVMapper::livox_pcl_cbk, this): 
             nh.subscribe(lid_topic, 200000, &LIVMapper::standard_pcl_cbk, this);
   sub_imu = nh.subscribe(imu_topic, 200000, &LIVMapper::imu_cbk, this);
-  sub_img = nh.subscribe(img_topic, 200000, &LIVMapper::img_cbk, this);
+  if (img_en) sub_img = nh.subscribe(img_topic, 200000, &LIVMapper::img_cbk, this);
   
   pubLaserCloudFullRes = nh.advertise<sensor_msgs::PointCloud2>("/cloud_registered", 100);
   pubNormal = nh.advertise<visualization_msgs::MarkerArray>("visualization_marker", 100);
@@ -251,6 +278,8 @@ void LIVMapper::processImu()
 {
   // double t0 = omp_get_wtime();
 
+  if (prob_livo_backend_enabled_) return;
+
   p_imu->Process2(LidarMeasures, _state, feats_undistort);
 
   if (gravity_align_en) gravityAlignment();
@@ -268,6 +297,11 @@ void LIVMapper::processImu()
 
 void LIVMapper::stateEstimationAndMapping() 
 {
+  if (prob_livo_backend_enabled_)
+  {
+    if (prob_livo_backend_->ProcessEpoch(LidarMeasures)) handleProbLio();
+    return;
+  }
   switch (LidarMeasures.lio_vio_flg) 
   {
     case VIO:
@@ -278,6 +312,27 @@ void LIVMapper::stateEstimationAndMapping()
       handleLIO();
       break;
   }
+}
+
+void LIVMapper::handleProbLio()
+{
+  if (prob_livo_backend_->lifecycle_state() != prob_livo::ProbLioLifecycle::RUN)
+    return;
+
+  _state = prob_livo_backend_->state();
+  state_propagat = _state;
+  feats_undistort = prob_livo_backend_->undistorted_scan();
+  *pcl_w_wait_pub = *prob_livo_backend_->world_scan();
+  if (pcl_w_wait_pub->empty()) return;
+
+  euler_cur = RotMtoEuler(_state.rot_end);
+  geoQuat = tf::createQuaternionMsgFromRollPitchYaw(
+      euler_cur(0), euler_cur(1), euler_cur(2));
+  publish_odometry(pubOdomAftMapped);
+  publish_frame_world(pubLaserCloudFullRes, vio_manager);
+  publish_path(pubPath);
+  publish_mavros(mavros_pose_publisher);
+  ++frame_num;
 }
 
 void LIVMapper::handleVIO() 

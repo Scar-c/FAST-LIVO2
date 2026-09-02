@@ -127,6 +127,20 @@ add_library(prob_livo_eskf
   src/prob_livo/prob_eskf19.cpp
   src/prob_livo/prob_imu_adapter.cpp
 )
+add_library(prob_livo_backend src/prob_livo/prob_lio_backend.cpp)
+target_include_directories(prob_livo_backend PRIVATE
+  include/prob_livo/super_native
+)
+target_link_libraries(prob_livo_backend
+  prob_livo_eskf
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Sophus_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${OpenMP_CXX_FLAGS}
+)
+target_link_libraries(laser_mapping prob_livo_backend)
 
 # I1/I2 estimator code is deliberately non-wired.  The executable keeps the
 # existing FAST-LIVO2 runtime path until the later scheduler-owned stages.
@@ -161,6 +175,33 @@ add_executable(prob_livo_i2_tests
 )
 target_include_directories(prob_livo_i2_tests PRIVATE tests/prob_livo)
 target_link_libraries(prob_livo_i2_tests
+  prob_livo_eskf
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Sophus_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${OpenMP_CXX_FLAGS}
+)
+
+add_executable(prob_livo_i3_tests
+  tests/prob_livo/test_i3_main.cpp
+  tests/prob_livo/test_i3_map_init.cpp
+  tests/prob_livo/test_i3_downsample.cpp
+  tests/prob_livo/test_i3_point_covariance.cpp
+  tests/prob_livo/test_i3_octvox.cpp
+  tests/prob_livo/test_i3_hknn.cpp
+  tests/prob_livo/test_i3_qr_plane.cpp
+  tests/prob_livo/test_i3_qr_covariance.cpp
+  tests/prob_livo/test_i3_association_weight.cpp
+  tests/prob_livo/test_i3_backend_seam.cpp
+)
+target_include_directories(prob_livo_i3_tests PRIVATE
+  tests/prob_livo
+  include/prob_livo/super_native
+)
+target_link_libraries(prob_livo_i3_tests
+  prob_livo_backend
   prob_livo_eskf
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
