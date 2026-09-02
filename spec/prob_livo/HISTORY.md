@@ -92,18 +92,26 @@ The canonical runner is
 starts one local ROS master and one FAST node, replays only EEE01 IMU/LiDAR,
 and stores an ignored, self-describing run directory. The path-fix and isolated
 ROS-home corrections are `e1c63cb` and `ce805bb`. The complete run
-`results/prob_livo/runs/eee01_camera_off_p0_p4_retry/` returned zero for bag
-playback, node shutdown, GT extraction, evaluation, and the overall run.
+`results/prob_livo/runs/eee01_camera_off_p0_p4_correction/` returned zero for
+bag playback, node shutdown, counters, GT extraction, evaluation, and the
+overall run. It recorded 3602 successful epochs: 3 IMU_INIT epochs, 4
+MAP_INIT epochs, and 3595 RUN epochs. Runtime authority counters recorded
+17017 raw map-init inserts, 12485822 map-update inserts, 14702670 undistorted
+points, 12485822 downsampled points, 36666902 HKNN queries, 181435218 HKNN
+returns, 30034406 valid QR attempts, and 37765549 weighted measurements.
 
 Using the NTU VIRAL dataset-author evaluator, the baseline achieved
 translation ATE RMSE `0.05290159739482509 m` over 3016 matched estimates. The
 same evaluator was applied to the legacy P4 reference artifact
 `p11_smoke_eee_p4_lc` (`0.08883155405698266 m`, 3329 matched). The required
 primary comparison uses raw world frames without mutual SE(3) alignment: 3594
-matched rows, translation RMSE `0.1272755745726123 m`, rotation RMSE
-`0.01831955642234057 rad`, classified exactly once as
+matched rows, timestamp mean/max absolute delta
+`0.02349526841042104 / 0.06304597854614258 s`, translation RMSE/median/max
+`0.1272755745726123 / 0.10450333931631896 / 0.5874476253736715 m`, rotation
+RMSE/median/max `0.01831955642234057 / 0.0092050820666131 /
+0.08735832181275227 rad`, classified exactly once as
 `I3_TRAJECTORY_CLOSE_NONIDENTICAL`.
 
-I3 is closed/owner-verified. The next stage is I4, the
+I3 is `CLOSED/PASS — Owner audit pending`. The next stage is I4, the
 `pointWithVar`-compatible current-scan adapter; camera-ON visual closure is
 still reserved for I6.

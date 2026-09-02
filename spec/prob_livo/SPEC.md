@@ -1,8 +1,8 @@
 # Prob-LIVO Integration Specification
 
-Status: Prompt 3 / I3 camera-OFF Prob-LIO P0–P4 baseline; I0, I1, I2, and I3
-are closed and owner-verified. The EEE01 raw-trajectory comparison is
-`I3_TRAJECTORY_CLOSE_NONIDENTICAL`.
+Status: Prompt 3 / I3 camera-OFF Prob-LIO P0–P4 baseline; I0, I1, and I2 are
+closed/owner-verified. I3 is `CLOSED/PASS — Owner audit pending`. The EEE01
+raw-trajectory comparison is `I3_TRAJECTORY_CLOSE_NONIDENTICAL`.
 
 This is the single current-truth authority for the FAST-LIVO2-hosted Prob-LIVO
 integration. Historical notes and future prompts must not redefine these
@@ -134,16 +134,16 @@ not to change before the listed stage.
 |---|---|---|---|---|---|---|---|
 | H0 | scheduler / scan recombination | `LIVMapper::run`, `sync_packages` | unchanged FAST-LIVO2 shell | IMU/LIO/VIO handlers | FAST-LIVO2 `src/LIVMapper.cpp:534-552,884-1030` | I0/I2 | FROZEN |
 | H1 | shared `StatesGroup` / x19-P19 | `StatesGroup` | `ProbESKF19` in host ABI | scheduler, LIO, VIO | FAST-LIVO2 `include/common_lib.h:126-206` plus I1 contract | I1 | FROZEN ABI |
-| H2 | IMU propagation / undistortion | `ImuProcess::Process2`, `UndistortPcl` | `ProbImuAdapter` under H0 | Prob-LIO scan input | FAST-LIVO2 scheduler + Super `ESKF::Predict`/`Propagation_Undistort` | I2 | CLOSED/PASS — owner verified |
-| H3 | LiDAR downsample | PCL `VoxelGrid` in `handleLIO` | Super `VoxelGridClosest` | OctVox/backend | `include/prob_livo/super_native/OctVoxMap/VoxelGridFilter.h`; `src/prob_livo/prob_lio_backend.cpp:239-246` | I3 | CLOSED/PASS — owner verified |
-| H4 | compact map insertion/storage | FAST `VoxelMapManager` octree | Prob `OctVox` | HKNN, plane provider | `include/prob_livo/super_native/OctVoxMap/OctVoxMap.hpp`; `src/prob_livo/prob_lio_backend.cpp:199-237,365-394` | I3 | CLOSED/PASS — owner verified |
-| H5 | HKNN | FAST local voxel lookup/recursion | Super HKNN | QR and association | `include/prob_livo/super_native/OctVoxMap/OctVoxMap.hpp`; `src/prob_livo/prob_lio_backend.cpp:284-299` | I3 | CLOSED/PASS — owner verified |
-| H6 | QR plane estimator | FAST PCA/eigen plane | Super QR plane solve | P3, LIO, provider | `include/prob_livo/super_native/prob_qr_plane.h`; `src/prob_livo/prob_lio_backend.cpp:300-316` | I3 | CLOSED/PASS — owner verified |
-| H7 | P1 sensor covariance | FAST `calcBodyCov` | Prob P1 frame-correct covariance | P2/P4/current scan | `include/prob_livo/super_native/prob_geometry_p0_p4.h`; `src/prob_livo/prob_lio_backend.cpp:253-268` | I3 | CLOSED/PASS — owner verified |
-| H8 | P2 map covariance | FAST pose-aware point covariance | Prob map covariance | OctVox/HKNN | `include/prob_livo/super_native/prob_geometry_p0_p4.h`; `src/prob_livo/prob_lio_backend.cpp:375-394` | I3 | CLOSED/PASS — owner verified |
-| H9 | P3 QR covariance | FAST 6x6 PCA covariance | Prob 4x4 QR covariance | P4/provider | `include/prob_livo/super_native/prob_qr_plane.h`; `src/prob_livo/prob_lio_backend.cpp:307-315` | I3/I5 | CLOSED/PASS — owner verified |
-| H10 | LiDAR association | FAST `build_single_residual` gate | Super legacy gate | LIO residual construction | `include/prob_livo/super_native/prob_qr_plane.h`; `src/prob_livo/prob_lio_backend.cpp:300-326` | I3 | CLOSED/PASS — owner verified |
-| H11 | P4 weighting | FAST active variance weight | Prob P4 `w=1/R_i` | IESKF information update | `include/prob_livo/super_native/prob_geometry_p0_p4.h`; `src/prob_livo/prob_lio_backend.cpp:335-355` | I3 | CLOSED/PASS — owner verified |
+| H2 | IMU propagation / undistortion | `ImuProcess::Process2`, `UndistortPcl` | `ProbImuAdapter` under H0 | Prob-LIO scan input | FAST-LIVO2 scheduler + Super `ESKF::Predict`/`Propagation_Undistort` | I2 | CLOSED / OWNER VERIFIED |
+| H3 | LiDAR downsample | PCL `VoxelGrid` in `handleLIO` | Super `VoxelGridClosest` | OctVox/backend | `include/prob_livo/super_native/OctVoxMap/VoxelGridFilter.h`; `src/prob_livo/prob_lio_backend.cpp:239-246` | I3 | CLOSED/PASS — Owner audit pending |
+| H4 | compact map insertion/storage | FAST `VoxelMapManager` octree | Prob `OctVox` | HKNN, plane provider | `include/prob_livo/super_native/OctVoxMap/OctVoxMap.hpp`; `src/prob_livo/prob_lio_backend.cpp:199-237,365-394` | I3 | CLOSED/PASS — Owner audit pending |
+| H5 | HKNN | FAST local voxel lookup/recursion | Super HKNN | QR and association | `include/prob_livo/super_native/OctVoxMap/OctVoxMap.hpp`; `src/prob_livo/prob_lio_backend.cpp:284-299` | I3 | CLOSED/PASS — Owner audit pending |
+| H6 | QR plane estimator | FAST PCA/eigen plane | Super QR plane solve | P3, LIO, provider | `include/prob_livo/super_native/prob_qr_plane.h`; `src/prob_livo/prob_lio_backend.cpp:300-316` | I3 | CLOSED/PASS — Owner audit pending |
+| H7 | P1 sensor covariance | FAST `calcBodyCov` | Prob P1 frame-correct covariance | P2/P4/current scan | `include/prob_livo/super_native/prob_geometry_p0_p4.h`; `src/prob_livo/prob_lio_backend.cpp:253-268` | I3 | CLOSED/PASS — Owner audit pending |
+| H8 | P2 map covariance | FAST pose-aware point covariance | Prob map covariance | OctVox/HKNN | `include/prob_livo/super_native/prob_geometry_p0_p4.h`; `src/prob_livo/prob_lio_backend.cpp:375-394` | I3 | CLOSED/PASS — Owner audit pending |
+| H9 | P3 QR covariance | FAST 6x6 PCA covariance | Prob 4x4 QR covariance | P4/provider | `include/prob_livo/super_native/prob_qr_plane.h`; `src/prob_livo/prob_lio_backend.cpp:307-315` | I3/I5 | CLOSED/PASS — Owner audit pending |
+| H10 | LiDAR association | FAST `build_single_residual` gate | Super legacy gate | LIO residual construction | `include/prob_livo/super_native/prob_qr_plane.h`; `src/prob_livo/prob_lio_backend.cpp:300-326` | I3 | CLOSED/PASS — Owner audit pending |
+| H11 | P4 weighting | FAST active variance weight | Prob P4 `w=1/R_i` | IESKF information update | `include/prob_livo/super_native/prob_geometry_p0_p4.h`; `src/prob_livo/prob_lio_backend.cpp:335-355` | I3 | CLOSED/PASS — Owner audit pending |
 | H12 | current scan output | `VoxelMapManager::pv_list_` | `pointWithVar`-compatible adapter | FAST VIO shell | FAST `pointWithVar` ABI, `include/common_lib.h:102-123` | I4 | NOT STARTED |
 | H13 | visual plane provider | direct FAST map lookup | `VisualPlanePrior` adapter from OctVox/HKNN/QR/P3 | VIO plane/raycast paths | provider contract in §6 | I5 | NOT STARTED |
 | H14 | visual 3σ consistency gate | `updateReferencePatch` | unchanged FAST gate | visual point lifecycle | FAST `src/vio.cpp:969-1021` | I6 | FROZEN UNTIL I6 |
@@ -309,9 +309,9 @@ no reliance on old build/ or devel/
 | Stage | Meaning | Status |
 |---|---|---|
 | I0 | Host / contract freeze | CLOSED / OWNER VERIFIED |
-| I1 | `ProbESKF19` | CLOSED/PASS — Owner audit pending |
-| I2 | Super IMU + undistort under LIVO2 scheduler | CLOSED/PASS — OWNER VERIFIED |
-| I3 | Prob-LIO P0–P4 backend, camera OFF | CLOSED/PASS — OWNER VERIFIED; raw comparison `I3_TRAJECTORY_CLOSE_NONIDENTICAL` |
+| I1 | `ProbESKF19` | CLOSED / OWNER VERIFIED |
+| I2 | Super IMU + undistort under LIVO2 scheduler | CLOSED / OWNER VERIFIED |
+| I3 | Prob-LIO P0–P4 backend, camera OFF | CLOSED/PASS — Owner audit pending; raw comparison `I3_TRAJECTORY_CLOSE_NONIDENTICAL` |
 | I4 | `pointWithVar`-compatible current-scan adapter | NOT STARTED |
 | I5 | `ProbPlaneProvider` | NOT STARTED |
 | I6 | camera ON / FAST-LIVO2 visual sequential closure | NOT STARTED |
@@ -604,8 +604,8 @@ The current stage state is:
 ```text
 I0 = CLOSED / OWNER VERIFIED
 I1 = CLOSED / OWNER VERIFIED
-I2 = CLOSED/PASS — OWNER VERIFIED
-I3 = CLOSED/PASS — OWNER VERIFIED
+I2 = CLOSED / OWNER VERIFIED
+I3 = CLOSED/PASS — Owner audit pending
 I4–I8 = NOT STARTED
 
 H0 FAST scheduler             = preserved
@@ -637,33 +637,69 @@ LiDAR voxel map are disabled for this baseline.
 
 ### 17.1 I3 gate ledger
 
-| Gate | Evidence | Result |
-|---|---|---|
-| G-I3.1 | `prob_livo_i3_tests`: lifecycle/map-init, downsample, OctVox, HKNN, QR/P3, P1/P2/P4, and backend seam; 79 checks | PASS |
-| G-I3.2 | `prob_livo_backend` and `fastlivo_mapping` build from the host workspace | PASS |
-| G-I3.3 | canonical runner requires a clean tree, uses one FAST node/backend, replays only IMU/LiDAR, records effective params and unique run metadata | PASS |
-| G-I3.4 | EEE01 whole-bag camera-OFF run: `play_rc=0`, `node_rc=0`, `ground_truth_rc=0`, `evaluation_rc=0`, `run_rc=0`, 3595 trajectory rows | PASS |
-| G-I3.5 | same NTU official evaluator and raw primary comparison against the legacy P4 artifact; no mutual SE(3) alignment | `I3_TRAJECTORY_CLOSE_NONIDENTICAL` |
+| Gate | Semantic invariant / authoritative path | Observable evidence / threshold | Negative mutation | Result |
+|---|---|---|---|---|
+| G-I3.1 | Super KF init and map-init lifecycle; `ProbLioBackend::ProcessImuInit/ProcessMapInit` | 50-sample KF threshold; four raw map-init scans; runtime counters `imu_init_epochs=3`, `map_init_epochs=4`, `map_init_inserts=17017` | fewer than 50 samples or fewer than four raw inserts | PASS |
+| G-I3.2 | Super `VoxelGridClosest`; `include/prob_livo/super_native/OctVoxMap/VoxelGridFilter.h` | fixture gives exactly two voxels and retains the closest representative | ordinary centroid/host voxel selection | PASS |
+| G-I3.3 | P1 frame-correct sensor covariance; `prob_geometry_p0_p4.h:37-115` | covariance list size matches points; all matrices finite/symmetric/PSD; LiDAR→IMU round trip error `<1e-12` | stale covariance list or broken extrinsic inverse | PASS |
+| G-I3.4 | P2 pose-aware map covariance; `ComputeMapCovList`, backend `UpdateMap` | production map update validates each covariance and runtime inserts `12485822` points | omit pose covariance or bypass covariance validation | PASS |
+| G-I3.5 | Super HKNN/OctVox neighborhood lookup; `OctVoxMap.hpp:472-553` and HKNN table | 60-neighbor table constants preserved; query returns at least four covariance-carrying neighbors; runtime returns `181435218` neighbors | changed search table or fewer than four neighbors | PASS |
+| G-I3.6 | Super QR plane solve; `prob_qr_plane.h:40-98` | full-rank fixture is solved, legacy accepted, rank `3`, expected coefficients/offset | rank-deficient plane accepted | PASS |
+| G-I3.7 | P3 QR-consistent covariance; `prob_qr_plane.h:98-194` | full-rank covariance is finite/valid; degenerate neighborhood is rejected; runtime `qr_attempted=30034406`, `qr_valid=30034406` | accept invalid QR covariance | PASS |
+| G-I3.8 | Super legacy association gate in backend `BuildAndSolveScan` | `fit.legacy_accepted` and `length > 81 * residual^2` guard are production paths; no P5 association is called | replace with FAST gate or enable P5 | PASS |
+| G-I3.9 | P4 `w=1/(0.001+plane+sensor)`; `ComputeP2pProbWeight` | zero variance gives `1000`; `(0.2,0.3)` gives `1/0.501`; negative variance rejected; runtime weighted `37765549` | negative variance accepted or fixed weight always used | PASS |
+| G-I3.10 | one observation lifecycle over shared `ProbESKF19`; `ProcessRun` + `UpdateObserve` | backend seam reaches RUN, consumes look-ahead, updates shared state, runtime `run_epochs=3595` | duplicate filter or missing look-ahead | PASS |
+| G-I3.11 | Prob OctVox is the sole LiDAR map; backend `InsertInitialMap/UpdateMap` | raw map-init inserts `17017`; covariance-aware update inserts `12485822`; no FAST `VoxelMapManager` dispatch in Prob mode | retain/dispatch FAST LiDAR map | PASS |
+| G-I3.12 | single state/map authority; `ProbLioBackend` and `LIVMapper::handleProbLio` | one shared `StatesGroup`/`ProbESKF19`; one `Prob OctVox`; camera/VIO and FAST LiDAR map inactive | duplicate state/map or visual dispatch | PASS |
+| G-I3.13 | end-to-end runtime authority; canonical runner | one ROS master, one `fastlivo_mapping`, one backend; clean run HEAD `c36a96b`; all runtime RCs `0` | duplicate mapper/backend or dirty-tree run | PASS |
+| G-I3.14 | full `eee_01` completion and same evaluator | whole bag at rate `1.0`; 3595 rows; GT 6616 rows; evaluator matched 3016; `run_rc=0` | partial/truncated bag or different evaluator | PASS |
+| G-I3.15 | old/new raw trajectory and ATE comparison | raw comparison matched 3594 rows; official old/new ATE block recorded below; exactly one classification | mutual SE(3) alignment or missing ATE comparison | PASS |
+| G-I3.16 | no tuning, P5, visual contamination | camera OFF; only IMU/LiDAR replay; no P5; no sweep; I4 untouched | tune/sweep, camera/VIO, P5, or FAST map | PASS |
 
 ### 17.2 Canonical EEE01 baseline record
 
 ```text
 runner: tools/prob_livo/run_eee01_camera_off.sh
-run_dir: results/prob_livo/runs/eee01_camera_off_p0_p4_retry
-run_head: ce805bb8e02eb234d004a6e2d1c54ed35bfc1ba5
+run_dir: results/prob_livo/runs/eee01_camera_off_p0_p4_correction
+run_head: c36a96b9a3d88c9f6336edc98c2e52c86642fae2
 bag_sha256: 7ea43946cffdd49c88d993ad3f192a4e90a8f6826eddc2ef1a9d4f5343ca6c17
 config_sha256: c8f94f130e599b928c3f02c3f3d3b2009ae01df76aec32f6ac96b6a987311ef3
+effective_config_sha256: f0ad429db8c0c2bde96099c7131814a6b0587bc1232edea4097ea4376536767a
 camera: OFF
 replayed_topics: /imu/imu, /os1_cloud_node1/points
 backend: ProbLioBackend P0-P4
 trajectory_rows: 3595
+trajectory_start: 1609059013.9799576
+trajectory_end: 1609059411.7837925
+runtime_wall_s: 415
 official_ate_rmse_m: 0.05290159739482509
 official_matched: 3016
+successful_epochs: 3602
+imu_init_epochs: 3
+map_init_epochs: 4
+run_epochs: 3595
+map_init_inserts: 17017
+map_update_inserts: 12485822
+undistorted_points: 14702670
+downsampled_points: 12485822
+hknn_queries: 36666902
+hknn_returns: 181435218
+qr_attempted: 30034406
+qr_valid: 30034406
+weighted_measurements: 37765549
+legacy_measurements: 0
 legacy_reference: /home/lc/prob_lio/src/Super-LIO/results/prob_lio/p11_smoke_eee_p4_lc/trajectory.tum
+legacy_algorithm_sha: 621acbd8d9a67634d3782fe8ab56e8a49ec821a9
 legacy_reference_rows: 3981
 raw_compare_matched_rows: 3594
+raw_timestamp_mean_abs_s: 0.02349526841042104
+raw_timestamp_max_abs_s: 0.06304597854614258
 raw_translation_rmse_m: 0.1272755745726123
+raw_translation_median_m: 0.10450333931631896
+raw_translation_max_m: 0.5874476253736715
 raw_rotation_rmse_rad: 0.01831955642234057
+raw_rotation_median_rad: 0.0092050820666131
+raw_rotation_max_rad: 0.08735832181275227
 raw_alignment: NONE_RAW_WORLD_FRAMES
 classification: I3_TRAJECTORY_CLOSE_NONIDENTICAL
 ```
@@ -675,3 +711,14 @@ comparison is intentionally raw-world-frame and has exactly one classification
 from `tools/prob_livo/compare_trajectories.py`. No parameter sweep or tuning was
 performed. The ignored run directory is the executable evidence bundle; the
 tracked evidence index records its identity and hashes.
+
+### 17.3 ATE comparison
+
+```text
+old canonical Prob-LIO ATE: 0.08883155405698266 m
+new FAST-host Prob-LIO ATE: 0.05290159739482509 m
+absolute delta: -0.035929956662157571 m
+percent delta: -40.447290429152716 %
+old matched GT: 3329
+new matched GT: 3016
+```

@@ -27,8 +27,8 @@ The exact Prompt 2 text is registered at
 The exact Prompt 3 text is registered at
 `prompts/prob_livo/prompt3_i2_close_i3_prob_lio_baseline.md`.
 
-Current boundary: I0, I1, I2, and I3 are closed/owner-verified. The canonical
-EEE01 camera-OFF run is classified
+Current boundary: I0, I1, and I2 are closed/owner-verified; I3 is
+`CLOSED/PASS — Owner audit pending`. The canonical EEE01 camera-OFF run is classified
 `I3_TRAJECTORY_CLOSE_NONIDENTICAL` with official NTU ATE RMSE
 `0.05290159739482509 m`. Next stage: I4 `pointWithVar`-compatible
 current-scan adapter.

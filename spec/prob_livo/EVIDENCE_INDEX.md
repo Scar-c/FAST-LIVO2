@@ -228,10 +228,12 @@ final HEAD, and push result are recorded after the close commit below.
 Prompt 3 source: /home/lc/super_livo/prompts/prompt3_i2_close_i3_eee01_baseline.md
 Prompt registration: prompts/prob_livo/prompt3_i2_close_i3_prob_lio_baseline.md
 Prompt registration SHA256: 2a46d4c2950d9fb7537766e3af3e23ce4b32c0ed5840ecfae0e7d8b831f72319
-Prompt 3 implementation start: 27854c0
+Prompt 3 start HEAD: 54a215847c8c429f8ee926ba5ff0017114ef7f02
+I2 lifecycle corrective commit: 27854c0
 I3 backend commit: 30e5e3e
 Runner path-fix commit: e1c63cb
 Runner ROS-home fix: ce805bb
+Runtime counters/compare correction: c36a96b
 Prob-LIO reference SHA: 9fc949f46291c0fa76e5b7cdb372c940eb4b3f6e
 ```
 
@@ -274,17 +276,23 @@ forces `/common/img_en=0`, enables `ProbLioBackend`, replays only
 `/imu/imu` and `/os1_cloud_node1/points`, extracts `/leica/pose/relative`, and
 runs the copied legacy evaluator. Its complete ignored output is:
 
-`results/prob_livo/runs/eee01_camera_off_p0_p4_retry/`
+`results/prob_livo/runs/eee01_camera_off_p0_p4_correction/`
 
 ```text
-run HEAD: ce805bb8e02eb234d004a6e2d1c54ed35bfc1ba5
+run HEAD: c36a96b9a3d88c9f6336edc98c2e52c86642fae2
 bag SHA256: 7ea43946cffdd49c88d993ad3f192a4e90a8f6826eddc2ef1a9d4f5343ca6c17
 config SHA256: c8f94f130e599b928c3f02c3f3d3b2009ae01df76aec32f6ac96b6a987311ef3
 camera: OFF
 backend: ProbLioBackend P0-P4
 replayed topics: /imu/imu, /os1_cloud_node1/points
-play/node/GT/evaluator/run RC: 0/0/0/0/0
+play/node/counter/GT/evaluator/run RC: 0/0/0/0/0/0
 trajectory rows: 3595
+trajectory timestamps: 1609059013.9799576 .. 1609059411.7837925
+runtime wall: 415 s
+authority counters: successful=3602, IMU_INIT epochs=3, MAP_INIT epochs=4,
+  RUN epochs=3595, raw map inserts=17017, map-update inserts=12485822,
+  undistorted=14702670, downsampled=12485822, HKNN queries/returns=36666902/181435218,
+  QR attempted/valid=30034406/30034406, P4 weighted=37765549, legacy=0
 ```
 
 The evaluator wrapper is `eval/prob_livo/eval_ntu_viral_official.py`, SHA256
@@ -295,21 +303,52 @@ matched estimates. The legacy P4 reference artifact is
 `/home/lc/prob_lio/src/Super-LIO/results/prob_lio/p11_smoke_eee_p4_lc/trajectory.tum`
 (3981 rows; SHA256
 `259d3fbc16e5b918a75d5517c4f5feac0b29e40b7c6d5464f881185704595199`).
+Its algorithm SHA is `621acbd8d9a67634d3782fe8ab56e8a49ec821a9`, its effective
+config SHA256 is `33b78b66c1c51a5fc1544de5a98085527b3fc60b1d55711f5b0a68d1d2ad92be`,
+and its Leica GT SHA256 is
+`1829bbbd60da4e5ec3b94a51ee96431f443b6672f18c76ed24d060497040049e`.
 
 The primary comparison command was:
 
 ```bash
 python3 tools/prob_livo/compare_trajectories.py \
   /home/lc/prob_lio/src/Super-LIO/results/prob_lio/p11_smoke_eee_p4_lc/trajectory.tum \
-  results/prob_livo/runs/eee01_camera_off_p0_p4_retry/trajectory.tum \
-  --out results/prob_livo/runs/eee01_camera_off_p0_p4_retry/trajectory_comparison.json
+  results/prob_livo/runs/eee01_camera_off_p0_p4_correction/trajectory.tum \
+  --out results/prob_livo/runs/eee01_camera_off_p0_p4_correction/trajectory_comparison.json
 ```
 
-It matched 3594 rows, with raw translation RMSE `0.1272755745726123 m`, raw
-rotation RMSE `0.01831955642234057 rad`, and
+It matched 3594 rows. Timestamp delta mean absolute/max is
+`0.02349526841042104 / 0.06304597854614258 s`; raw translation
+RMSE/median/max is `0.1272755745726123 / 0.10450333931631896 /
+0.5874476253736715 m`; raw rotation RMSE/median/max is
+`0.01831955642234057 / 0.0092050820666131 / 0.08735832181275227 rad`; and
 `alignment: NONE_RAW_WORLD_FRAMES`. The exactly-one result is
 `I3_TRAJECTORY_CLOSE_NONIDENTICAL`; the official evaluator's internal
 `SE3_UMEYAMA_NO_SCALE` is not used for this raw comparison.
+
+### ATE Comparison
+
+```text
+old canonical Prob-LIO ATE: 0.08883155405698266 m
+new FAST-host Prob-LIO ATE: 0.05290159739482509 m
+absolute delta: -0.035929956662157571 m
+percent delta: -40.447290429152716 %
+old matched GT: 3329
+new matched GT: 3016
+```
+
+### G-I3.13–G-I3.16 and scope audit
+
+```text
+G-I3.13 end-to-end runtime authority: PASS — clean tree, one ROS master,
+  one fastlivo_mapping, one ProbLioBackend, counters sidecar and all RCs 0.
+G-I3.14 full eee_01 completion: PASS — whole bag, rate 1.0, 3595 estimate
+  rows, 6616 Leica GT rows, same copied NTU evaluator, 3016 matches.
+G-I3.15 old/new comparison: PASS — raw comparison and ATE comparison both
+  produced; no mutual SE3 alignment; one classification.
+G-I3.16 no contamination: PASS — camera/VIO OFF, no P5, no tuning/sweep,
+  no duplicate bag/mapper, FAST VoxelMapManager inactive, I4 not started.
+```
 
 No tuning, sweep, duplicate bag/mapper, camera/VIO runtime, or P5 path was
 used. Final worktree cleanliness, final HEAD, and push result are recorded by

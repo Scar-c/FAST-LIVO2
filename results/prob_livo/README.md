@@ -40,26 +40,55 @@ The whole-bag run used one FAST ROS node and the camera-OFF
 `/os1_cloud_node1/points` were replayed. The ignored, unique evidence bundle
 is:
 
-`runs/eee01_camera_off_p0_p4_retry/`
+`runs/eee01_camera_off_p0_p4_correction/`
 
 ```text
 bag SHA256: 7ea43946cffdd49c88d993ad3f192a4e90a8f6826eddc2ef1a9d4f5343ca6c17
-host HEAD at run: ce805bb8e02eb234d004a6e2d1c54ed35bfc1ba5
+host HEAD at run: c36a96b9a3d88c9f6336edc98c2e52c86642fae2
+config SHA256: c8f94f130e599b928c3f02c3f3d3b2009ae01df76aec32f6ac96b6a987311ef3
+effective config SHA256: f0ad429db8c0c2bde96099c7131814a6b0587bc1232edea4097ea4376536767a
 camera: OFF
 backend: ProbLioBackend P0-P4
-play/node/GT/evaluator/run RC: 0/0/0/0/0
+play/node/counter/GT/evaluator/run RC: 0/0/0/0/0/0
 trajectory rows: 3595
+trajectory timestamps: 1609059013.9799576 .. 1609059411.7837925
+authority counters: successful=3602, IMU_INIT=3, MAP_INIT=4, RUN=3595,
+map-init inserts=17017, map-update inserts=12485822,
+undistorted=14702670, downsampled=12485822,
+HKNN queries/returns=36666902/181435218,
+QR attempted/valid=30034406/30034406, P4 weighted=37765549
 official NTU ATE RMSE: 0.05290159739482509 m
 official matched: 3016
 ```
 
+The runtime authority sidecar is
+`runs/eee01_camera_off_p0_p4_correction/trajectory.tum.counters.yaml`.
+The evaluator is `eval/prob_livo/eval_ntu_viral_official.py` from the NTU
+VIRAL dataset-author benchmark (`viral_eval` revision
+`194dd4595b1fb5e8ae2a5a0c01255f816ab4082f`).
+
 The legacy P4 trajectory used for the required primary raw comparison is
 `/home/lc/prob_lio/src/Super-LIO/results/prob_lio/p11_smoke_eee_p4_lc/trajectory.tum`.
-The comparison matched 3594 rows and produced translation RMSE
-`0.1272755745726123 m`, rotation RMSE `0.01831955642234057 rad`, with
+Its algorithm SHA is `621acbd8d9a67634d3782fe8ab56e8a49ec821a9`.
+The comparison matched 3594 rows. Timestamp delta mean absolute/max was
+`0.02349526841042104 / 0.06304597854614258 s`; translation
+RMSE/median/max was `0.1272755745726123 / 0.10450333931631896 /
+0.5874476253736715 m`; rotation RMSE/median/max was
+`0.01831955642234057 / 0.0092050820666131 / 0.08735832181275227 rad`, with
 `alignment: NONE_RAW_WORLD_FRAMES` and the single classification
 `I3_TRAJECTORY_CLOSE_NONIDENTICAL`. The official evaluator's internal
 `SE3_UMEYAMA_NO_SCALE` is not used for that raw comparison.
+
+ATE comparison:
+
+```text
+old canonical Prob-LIO ATE: 0.08883155405698266 m
+new FAST-host Prob-LIO ATE: 0.05290159739482509 m
+absolute delta: -0.035929956662157571 m
+percent delta: -40.447290429152716 %
+old matched GT: 3329
+new matched GT: 3016
+```
 
 The canonical command is `tools/prob_livo/run_eee01_camera_off.sh`; it
 requires a clean worktree and refuses to overwrite an existing run directory.
