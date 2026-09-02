@@ -189,7 +189,7 @@ bool ProbESKF19::UpdateObserve(const ObservationCallback &observation) {
 
     Matrix6 HtVinvH = Matrix6::Zero();
     Vector6 HtVinvr = Vector6::Zero();
-    observation(state_, HtVinvH, HtVinvr);
+    observation(state_, need_converge_, HtVinvH, HtVinvr);
 
     Vector19 prior_error = StateDifference19(predicted, state_);
     Matrix19 prior_reset = Matrix19::Identity();

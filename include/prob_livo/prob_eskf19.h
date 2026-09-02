@@ -228,7 +228,8 @@ struct Options {
 class ProbESKF19 {
  public:
   using ObservationCallback =
-      std::function<void(const StatesGroup &, Matrix6 &, Vector6 &)>;
+      std::function<void(const StatesGroup &, bool need_converge, Matrix6 &,
+                         Vector6 &)>;
 
   explicit ProbESKF19(StatesGroup &state, Options options = Options());
 

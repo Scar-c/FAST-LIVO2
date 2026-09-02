@@ -172,7 +172,8 @@ inline void Apply(State &state, const V18 &increment, double gravity_norm) {
   state.gravity *= gravity_norm / state.gravity.norm();
 }
 
-using ObservationCallback = std::function<void(const State &, M6 &, V6 &)>;
+using ObservationCallback =
+    std::function<void(const State &, bool need_converge, M6 &, V6 &)>;
 
 struct UpdateStats {
   int iterations = 0;
@@ -196,7 +197,7 @@ inline UpdateStats UpdateObserve(State &state, const Options &options,
     }
     M6 HtVinvH = M6::Zero();
     V6 HtVinvr = V6::Zero();
-    observation(state, HtVinvH, HtVinvr);
+    observation(state, result.need_converge, HtVinvH, HtVinvr);
 
     V18 prior_error = Difference(predicted, state);
     M18 prior_reset = M18::Identity();

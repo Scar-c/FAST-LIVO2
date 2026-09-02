@@ -172,7 +172,7 @@ int RunExposureTests(TestContext &context) {
   const double variance_before = measured_host.cov(Layout::kExpo, Layout::kExpo);
   prob_livo::ProbESKF19 measured_filter(measured_host, production_options);
   measured_filter.UpdateObserve(
-      [](const StatesGroup &, Matrix6 &info, prob_livo::Vector6 &rhs) {
+      [](const StatesGroup &, bool, Matrix6 &info, prob_livo::Vector6 &rhs) {
         info = 2.0 * Matrix6::Identity();
         rhs << 0.5, -0.2, 0.1, 0.3, -0.1, 0.2;
       });
