@@ -396,3 +396,48 @@ current offline native TBB32 run both produce ATE `0.054502750 m`, 3980 rows,
 `7149297f46df10ce895fe564dc689b05b3356e6b7c58c03ff92bffd761b93410`; strict
 translation error is zero and rotation error is machine precision. This closes
 the offline reliability control without relabeling the historical result.
+
+## Prompt 5 / I3 first-divergence attribution
+
+The exact prompt is registered at
+`prompts/prob_livo/prompt5_i3_divergence_attribution.md`, SHA256
+`63f7e02b17ac8d87d61977458dbf000fae71532d58fdc773ffd05fc22a953ac7`. The
+structured report is `spec/prob_livo/PROMPT5_EVIDENCE.md`.
+
+The renamed original legacy workspace `/home/lc/prob_lio/src/Super-LIO` was
+not modified. A detached diagnostic worktree at
+`/tmp/prob_lio_diag/legacy_621acbd` was checked out at
+`621acbd8d9a67634d3782fe8ab56e8a49ec821a9` and rebuilt in clean diagnostic
+build/devel directories. Its live eee_01 oracle exactly reproduced the
+historical 3981 rows, 3329 matches, ATE `0.08883155405698266 m`, and trajectory
+SHA `259d3fbc16e5b918a75d5517c4f5feac0b29e40b7c6d5464f881185704595199`.
+
+The clean current Super-input run is
+`results/prob_livo/runs/eee01_camera_off_p0_p5_migrated_clean/`: 3981 rows,
+3329 matches, ATE `0.09099574805341126 m`, trajectory SHA
+`d06e472b04f7d304d1462b30b2077766f62bf7047cd4247f909c96b3ca277f03`, and
+3987/3986/3986/3986/0 callback/emitted/attempted/success/reject accounting.
+It uses the repository-owned in-process offline runner with TBB maximum
+parallelism 32; it does not invoke the old Super runtime.
+
+The first mismatch is RUN index 0 (trajectory row 1), at filter timestamp
+`1609059013.7636957` and epoch end `1609059013.7657526`. A selected-epoch
+signature trace found matching scheduler/input and first-point observables
+(3479 undistorted, 2433 downsampled), then a differing predicted state and
+measurement system. The legacy initialization mean acceleration is
+`0.84424549341201782 0.02315736748278141 -9.5785360336303711`; the migrated
+double result is `0.84424540194971809 0.02315736831374595 -9.5785373819285429`.
+This follows from legacy `scalar=float` versus the host double
+`StatesGroup`/`ProbESKF19`. The float-initialization-only control moved the
+first pose toward legacy but failed to reproduce it, providing the bounded
+causal negative control.
+
+The strict raw comparison remains 3981 pairs with timestamp delta RMSE/max
+`0/0 s`, translation RMSE/median/max
+`0.03319535524213128/0.03112573966899626/0.07739101605452314 m`, and rotation
+RMSE/median/max
+`0.00194296843409943/0.002017233514502395/0.009015083200112439 rad`.
+The first-divergence classification is `NUMERIC_ONLY`; the final Prompt5
+decision is `I3_DIVERGENCE_NUMERIC_ACCEPTED`. No precision downgrade, tuning,
+OMP limit, P5 association, visual runtime, or permanent diagnostic logging
+was added. I4 remains not started and I3 remains Owner-audit pending.

@@ -141,3 +141,29 @@ classified and was not an online/offline pair. A current online native run and
 current TBB32 offline native run both report `0.054502750 m`, 3980 rows, and
 the identical trajectory SHA; translation strict error is zero and rotation is
 machine precision. I4 remains not started.
+
+## Prompt 5 / I3 — first divergence attribution
+
+Prompt 5 registered the exact owner prompt and used a detached diagnostic
+worktree at `/tmp/prob_lio_diag/legacy_621acbd`, checked out at historical
+algorithm SHA `621acbd8d9a67634d3782fe8ab56e8a49ec821a9`. The renamed original
+workspace `/home/lc/prob_lio/src/Super-LIO` remained untouched and clean; stale
+absolute paths in its old build/devel were not treated as algorithm failures.
+
+The detached legacy source was rebuilt under its actual path and reproduced
+the historical eee_01 oracle exactly: 3981 rows, 3329 matched GT,
+ATE `0.08883155405698266 m`, and trajectory SHA
+`259d3fbc16e5b918a75d5517c4f5feac0b29e40b7c6d5464f881185704595199`.
+The current clean FAST-host + `super_ntu_legacy` run likewise reproduced
+3981 rows, 3329 matches, ATE `0.09099574805341126 m`, and trajectory SHA
+`d06e472b04f7d304d1462b30b2077766f62bf7047cd4247f909c96b3ca277f03`.
+
+The first divergence is already present at RUN index 0 (trajectory row 1):
+the scheduler timestamp contract and selected input point observables agree,
+but the predicted state differs after IMU initialization. The legacy tree
+uses `BASIC::scalar = float`; the migrated `StatesGroup` and `ProbESKF19` use
+double. A bounded float-initialization-only mutation moved the result toward
+legacy but did not reproduce the full legacy float-state pipeline. The causal
+classification is `NUMERIC_ONLY`, and the final decision is
+`I3_DIVERGENCE_NUMERIC_ACCEPTED`; no production precision downgrade is
+justified. Temporary trace code was removed. I4 was not started.

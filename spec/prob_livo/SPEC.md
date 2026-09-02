@@ -1,9 +1,10 @@
 # Prob-LIVO Integration Specification
 
-Status: Prompt 4 / I3 Super-input corrective; I0, I1, and I2 are
-closed/owner-verified. I3 is `CLOSED/PASS — Owner audit pending`. The
-Super-input EEE01 comparison is `SUPER_INPUT_TRAJECTORY_NEAR_PARITY`; the
-historical FAST-native result remains a separate control.
+Status: Prompt 5 / I3 divergence attribution; I0, I1, and I2 are
+closed/owner-verified. I3 is `CLOSED/PASS — Owner audit pending` with final
+classification `I3_DIVERGENCE_NUMERIC_ACCEPTED`. The Super-input EEE01
+comparison remains `SUPER_INPUT_TRAJECTORY_NEAR_PARITY`; the historical
+FAST-native result remains a separate control.
 
 This is the single current-truth authority for the FAST-LIVO2-hosted Prob-LIVO
 integration. Historical notes and future prompts must not redefine these
@@ -760,3 +761,47 @@ native run both report `0.054502750 m`, 3980 rows, 3327 matches, and identical
 trajectory SHA `7149297f46df10ce895fe564dc689b05b3356e6b7c58c03ff92bffd761b93410`.
 Strict translation difference is zero and rotation difference is machine
 precision. This is the current offline reliability control.
+
+## 19. Prompt 5 / I3 — first-divergence attribution
+
+The exact Prompt 5 text is registered at
+`prompts/prob_livo/prompt5_i3_divergence_attribution.md`; its SHA256 is
+`63f7e02b17ac8d87d61977458dbf000fae71532d58fdc773ffd05fc22a953ac7`.
+The complete gate report is `spec/prob_livo/PROMPT5_EVIDENCE.md`.
+
+The historical authority was reproduced from detached SHA
+`621acbd8d9a67634d3782fe8ab56e8a49ec821a9` in
+`/tmp/prob_lio_diag/legacy_621acbd`, rebuilt under
+`/tmp/prob_lio_diag/legacy_build` and `/tmp/prob_lio_diag/legacy_devel`.
+The original `/home/lc/prob_lio/src/Super-LIO` workspace remained clean and
+unchanged. The live oracle is exact: 3981 rows, 3329 GT matches,
+`0.08883155405698266 m`, and trajectory SHA
+`259d3fbc16e5b918a75d5517c4f5feac0b29e40b7c6d5464f881185704595199`.
+
+The clean migrated run is
+`results/prob_livo/runs/eee01_camera_off_p0_p5_migrated_clean/`: 3981 rows,
+3329 matches, ATE `0.09099574805341126 m`, trajectory SHA
+`d06e472b04f7d304d1462b30b2077766f62bf7047cd4247f909c96b3ca277f03`,
+3987 LiDAR callbacks, 3986 successful backend epochs, four map-init epochs,
+and one pending EOF LiDAR callback. The offline reader reports TBB maximum
+parallelism 32 and about 40 s wall time.
+
+The first divergent output is RUN index 0 (one-based trajectory row 1), with
+filter/trajectory timestamp `1609059013.7636957` and scheduler epoch end
+`1609059013.7657526`. The scheduler and audited Super-input preprocessing
+contract agree; the selected trace has 3479 undistorted and 2433 downsampled
+points with the same first downsampled point. The first different production
+observable is the S2 predict/undistortion state, caused by the preceding IMU
+initialization precision seam. Legacy uses `BASIC::scalar = float`
+(`src/basic/include/basic/alias.h:143` and the legacy ESKF), while the host
+`StatesGroup` and `ProbESKF19` use double (`include/common_lib.h:130-220`,
+`include/prob_livo/prob_eskf19.h:37-47`). The bounded float-initialization
+control moves the first pose toward legacy but does not reproduce the legacy
+float-state result, establishing causality without justifying a production
+precision downgrade.
+
+The first-divergence classification is `NUMERIC_ONLY`, and the final decision
+is `I3_DIVERGENCE_NUMERIC_ACCEPTED`. No production fix is needed: formulas,
+input semantics, lifecycle, map authority, gate outcomes, timestamps, and
+current online/offline contracts remain stable. Temporary selected-epoch
+diagnostics were removed before rebuild. I4 is not started.
