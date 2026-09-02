@@ -77,6 +77,29 @@ ProbLioBackend::ProbLioBackend(StatesGroup &state, const Options &options)
 }
 
 ProbLioBackend::~ProbLioBackend() {
+  if (!options_.trajectory_path.empty()) {
+    std::ofstream counters(options_.trajectory_path + ".counters.yaml",
+                            std::ios::out | std::ios::trunc);
+    if (counters.is_open()) {
+      counters << "schema_version: 1\n"
+               << "successful_epochs: " << counters_.successful_epochs << "\n"
+               << "imu_init_epochs: " << counters_.imu_init_epochs << "\n"
+               << "map_init_epochs: " << counters_.map_init_epochs << "\n"
+               << "run_epochs: " << counters_.run_epochs << "\n"
+               << "map_init_inserts: " << counters_.map_init_inserts << "\n"
+               << "map_update_inserts: " << counters_.map_update_inserts << "\n"
+               << "undistorted_points: " << counters_.undistorted_points << "\n"
+               << "downsampled_points: " << counters_.downsampled_points << "\n"
+               << "hknn_queries: " << counters_.hknn_queries << "\n"
+               << "hknn_returns: " << counters_.hknn_returns << "\n"
+               << "qr_attempted: " << counters_.qr_attempted << "\n"
+               << "qr_valid: " << counters_.qr_valid << "\n"
+               << "weighted_measurements: " << counters_.weighted_measurements
+               << "\n"
+               << "legacy_measurements: " << counters_.legacy_measurements
+               << "\n";
+    }
+  }
   if (trajectory_.is_open()) trajectory_.close();
 }
 

@@ -103,6 +103,12 @@ kill -INT "$NODE_PID" 2>/dev/null || true
 wait "$NODE_PID" 2>/dev/null
 NODE_RC=$?
 NODE_PID=""
+COUNTERS_PATH="$RUN_DIR/trajectory.tum.counters.yaml"
+if [[ -s "$COUNTERS_PATH" ]]; then
+  COUNTER_RC=0
+else
+  COUNTER_RC=2
+fi
 
 python3 "$REPO_ROOT/eval/prob_livo/pose_bag_to_tum.py" \
   --bag "$BAG" --topic /leica/pose/relative --output "$RUN_DIR/ground_truth.tum" \
@@ -118,7 +124,7 @@ else
 fi
 
 if [[ "$PLAY_RC" -eq 0 && ( "$NODE_RC" -eq 0 || "$NODE_RC" -eq 130 ) && \
-      "$GT_RC" -eq 0 && "$EVAL_RC" -eq 0 ]]; then
+      "$COUNTER_RC" -eq 0 && "$GT_RC" -eq 0 && "$EVAL_RC" -eq 0 ]]; then
   RC=0
 else
   RC=1
@@ -126,6 +132,8 @@ fi
 {
   echo "play_rc: $PLAY_RC"
   echo "node_rc: $NODE_RC"
+  echo "authority_counters: $COUNTERS_PATH"
+  echo "counter_rc: $COUNTER_RC"
   echo "ground_truth_rc: $GT_RC"
   echo "evaluation_rc: $EVAL_RC"
   echo "trajectory_rows: $(wc -l < "$RUN_DIR/trajectory.tum" 2>/dev/null || echo 0)"

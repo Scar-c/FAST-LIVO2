@@ -80,6 +80,7 @@ def compare(reference, estimate):
         "timestamp_overlap_s": [float(lo), float(hi)],
         "timestamp_delta_s": {
             "rmse": float(np.sqrt(np.mean(time_delta**2))),
+            "mean_abs": float(np.mean(np.abs(time_delta))),
             "median_abs": float(np.median(np.abs(time_delta))),
             "max_abs": float(np.max(np.abs(time_delta))),
         },
