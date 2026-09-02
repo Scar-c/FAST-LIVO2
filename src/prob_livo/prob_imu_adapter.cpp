@@ -240,8 +240,7 @@ ProbImuAdapter::Result ProbImuAdapter::ProcessLioEpoch(
     const double query_time = timing.point_time_origin +
                               static_cast<double>(point.curvature) / 1000.0;
     if (!std::isfinite(query_time) ||
-        query_time < timing.epoch_start - options_.time_tolerance ||
-        query_time > timing.epoch_end + options_.time_tolerance) {
+        query_time < timing.epoch_start - options_.time_tolerance) {
       SetFailure(result, "scheduler point time is outside the LIO epoch");
       return result;
     }
@@ -308,24 +307,42 @@ bool ProbImuAdapter::Undistort(const LidarMeasureGroup &measures,
     const PointType &input = measures.pcl_proc_cur->points[index];
     PointType &undistorted = output.points[index];
     undistorted = input;
-    double query_time = timing.point_time_origin +
-                        static_cast<double>(input.curvature) / 1000.0;
-    if (query_time < trace.front().timestamp - tolerance ||
-        query_time > trace.back().timestamp + tolerance) {
+    const double query_time = timing.point_time_origin +
+                              static_cast<double>(input.curvature) / 1000.0;
+    if (!std::isfinite(query_time) ||
+        query_time < trace.front().timestamp - tolerance) {
       message = "point query time is outside the propagated trace";
       return false;
     }
-    query_time = std::max(trace.front().timestamp,
-                          std::min(trace.back().timestamp, query_time));
+
+    // Super's Propagation_Undistort intentionally leaves points whose source
+    // acquisition time is after the scan endpoint in the LiDAR->IMU frame.
+    // This is required for the legacy Ouster source-order/end-time contract:
+    // the last accepted sampled point is the endpoint, not the maximum t.
+    if (query_time > trace.back().timestamp) {
+      const Eigen::Vector3d raw(input.x, input.y, input.z);
+      const Eigen::Vector3d lidar_in_imu =
+          options_.lidar_to_imu_rotation * raw +
+          options_.lidar_to_imu_translation;
+      undistorted.x = static_cast<float>(lidar_in_imu.x());
+      undistorted.y = static_cast<float>(lidar_in_imu.y());
+      undistorted.z = static_cast<float>(lidar_in_imu.z());
+      continue;
+    }
+
+    const double bounded_query_time =
+        std::max(trace.front().timestamp,
+                 std::min(trace.back().timestamp, query_time));
 
     PropagationSnapshot interpolated;
-    if (query_time <= trace.front().timestamp + tolerance) {
+    if (bounded_query_time <= trace.front().timestamp + tolerance) {
       interpolated = trace.front();
-    } else if (query_time >= trace.back().timestamp - tolerance) {
+    } else if (bounded_query_time >= trace.back().timestamp - tolerance) {
       interpolated = trace.back();
     } else {
       std::size_t upper = 1;
-      while (upper < trace.size() && trace[upper].timestamp < query_time) {
+      while (upper < trace.size() &&
+             trace[upper].timestamp < bounded_query_time) {
         ++upper;
       }
       if (upper >= trace.size()) {
@@ -337,9 +354,9 @@ bool ProbImuAdapter::Undistort(const LidarMeasureGroup &measures,
         if (!(dt > tolerance)) {
           interpolated = tail;
         } else {
-          const double tau = query_time - head.timestamp;
+          const double tau = bounded_query_time - head.timestamp;
           const double ratio = tau / dt;
-          interpolated.timestamp = query_time;
+          interpolated.timestamp = bounded_query_time;
           interpolated.rotation =
               Eigen::Quaterniond(head.rotation)
                   .slerp(ratio, Eigen::Quaterniond(tail.rotation))

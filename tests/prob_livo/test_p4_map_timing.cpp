@@ -37,6 +37,10 @@ int RunP4MapTimingTests(TestContext &context) {
       0.555, Eigen::Vector3d(0.0, 0.0, 9.7946), Eigen::Vector3d::Zero()});
   LidarMeasureGroup run_packet = MakeBackendEpoch(
       0.54, 0.55, run_imu, points, lookahead);
+  // Super Ouster source order can place a point after the endpoint defined by
+  // the final accepted sampled point. The legacy undistorter keeps that point
+  // in the raw LiDAR->IMU frame instead of rejecting the whole epoch.
+  run_packet.pcl_proc_cur->points.front().curvature = 20.0f;
   context.Check(backend.ProcessEpoch(run_packet),
                 "first RUN timing bridge rejected the epoch");
   context.Check(std::abs(backend.filter_current_time() - 0.55) < 1e-12,
@@ -45,6 +49,13 @@ int RunP4MapTimingTests(TestContext &context) {
                 "first RUN observation boundary did not advance");
   context.Check(backend.undistorted_scan()->size() == points.size(),
                 "first RUN undistorted cloud size mismatch");
+  context.Check(std::abs(backend.undistorted_scan()->points.front().x -
+                         points.front().x) < 1e-6f &&
+                    std::abs(backend.undistorted_scan()->points.front().y -
+                             points.front().y) < 1e-6f &&
+                    std::abs(backend.undistorted_scan()->points.front().z -
+                             points.front().z) < 1e-6f,
+                "post-endpoint legacy point was not kept in raw IMU frame");
   context.Check(state.cov.allFinite(),
                 "first RUN covariance is not finite");
   context.Record("G-P4.4 first_run_time", backend.filter_current_time());
