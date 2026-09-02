@@ -168,6 +168,7 @@ public:
   // Prompt-3 camera-OFF backend switch.  The backend owns the ProbESKF19,
   // lifecycle and Super-native map; LIVMapper remains the ROS shell.
   bool prob_livo_backend_enabled_ = false;
+  bool prob_livo_first_scheduler_epoch_ = true;
   prob_livo::InputSemantics prob_livo_input_semantics_ =
       prob_livo::InputSemantics::kFastNative;
   double prob_livo_super_blind_ = 2.0;

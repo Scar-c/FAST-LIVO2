@@ -1017,7 +1017,10 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
     prob_livo::SchedulerImuSelection selection;
     const bool imu_selection_ok = prob_livo::ConsumeSchedulerImuEpoch(
         imu_buffer, meas.last_lio_update_time, meas.lidar_frame_end_time,
-        selection);
+        selection, 2e-8,
+        prob_livo_first_scheduler_epoch_ &&
+            prob_livo_input_semantics_ ==
+                prob_livo::InputSemantics::kSuperNtuLegacy);
     m.imu = std::move(selection.current);
     meas.imu_lookahead = selection.lookahead;
     lid_raw_data_buffer.pop_front();
@@ -1026,6 +1029,8 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
     sig_buffer.notify_all();
 
     if (!imu_selection_ok) return false;
+
+    prob_livo_first_scheduler_epoch_ = false;
 
     meas.lio_vio_flg = LIO; // process lidar topic, so timestamp should be lidar scan end.
     meas.measures.push_back(m);

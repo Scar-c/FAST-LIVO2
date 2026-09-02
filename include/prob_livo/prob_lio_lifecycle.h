@@ -76,7 +76,7 @@ struct SchedulerImuSelection {
 inline bool ConsumeSchedulerImuEpoch(
     deque<sensor_msgs::Imu::ConstPtr> &imu_buffer, double epoch_start,
     double epoch_end, SchedulerImuSelection &selection,
-    double tolerance = 2e-8) {
+    double tolerance = 2e-8, bool include_before_start = false) {
   selection.current.clear();
   selection.lookahead.reset();
   if (!std::isfinite(epoch_start) || !std::isfinite(epoch_end) ||
@@ -89,6 +89,9 @@ inline bool ConsumeSchedulerImuEpoch(
     const double timestamp = message->header.stamp.toSec();
     if (!std::isfinite(timestamp)) return false;
     if (timestamp <= epoch_start + tolerance) {
+      if (include_before_start) {
+        selection.current.push_back(message);
+      }
       imu_buffer.pop_front();
     } else if (timestamp <= epoch_end + tolerance) {
       selection.current.push_back(message);
