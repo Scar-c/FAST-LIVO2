@@ -1,7 +1,7 @@
 # Prob-LIVO Integration Specification
 
 Status: Prompt 1 / I1 filter core; I0 is `CLOSED / OWNER VERIFIED` and I1 is
-`IN PROGRESS` until all gates and the push are complete.
+`CLOSED/PASS — Owner audit pending`.
 
 This is the single current-truth authority for the FAST-LIVO2-hosted Prob-LIVO
 integration. Historical notes and future prompts must not redefine these
@@ -308,7 +308,7 @@ no reliance on old build/ or devel/
 | Stage | Meaning | Status |
 |---|---|---|
 | I0 | Host / contract freeze | CLOSED / OWNER VERIFIED |
-| I1 | `ProbESKF19` | IN PROGRESS |
+| I1 | `ProbESKF19` | CLOSED/PASS — Owner audit pending |
 | I2 | Super IMU + undistort under LIVO2 scheduler | NOT STARTED |
 | I3 | Prob-LIO P0–P4 backend, camera OFF | NOT STARTED |
 | I4 | `pointWithVar`-compatible current-scan adapter | NOT STARTED |

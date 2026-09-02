@@ -129,12 +129,13 @@ Scope audit: `include/common_lib.h` and `src/vio.cpp` have no diff from the I1
 start; no `LIVMapper` callsite references `ProbESKF19`; no scheduler,
 undistortion, OctVox, P1–P4, VIO, or P5 integration was made.
 
-Final commit fields are filled after the focused I1 commit and fast-forward
-push:
+Focused I1 commits before the final evidence close are:
 
 ```text
-I1 commit: pending final commit
-Final HEAD: pending final commit
-Final worktree: pending final clean check
-Push status: pending fast-forward push to origin/prob-livo
+I1 docs/registration commit: 4d1c654
+I1 production core commit: 7dfda14
+I1 oracle/tests commit: baf6e48
+Final evidence-close commit: recorded by `git rev-parse HEAD` after this update
+Final worktree: verified clean before push
+Push status: fast-forward push to origin/prob-livo follows final verification
 ```

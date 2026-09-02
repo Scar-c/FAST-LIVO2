@@ -28,3 +28,13 @@ FAST `StatesGroup` operators are retained for FAST visual semantics and ABI.
 additive gravity operator differs from Super's gravity normalization, so direct
 use of `StatesGroup::operator+=` in LIO is forbidden. I6 will later observe
 visual-induced gravity correction rather than changing VIO in this stage.
+
+## Prompt 1 / I1 — shared ProbESKF19 core
+
+I1 adds a non-wired `ProbESKF19` library over the caller-owned FAST
+`StatesGroup`, using a centralized non-contiguous host/Super mapping. Predict
+and iterated LiDAR update follow the canonical Super ESKF source; inverse
+exposure is frozen by default and has an explicit host-compatible random walk
+option. A separately implemented test-only Super oracle covers dense covariance
+and adversarial negative fixtures. The host runtime remains untouched, and the
+next stage remains I2 scheduler-owned IMU/undistortion work.
