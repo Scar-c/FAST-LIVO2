@@ -148,7 +148,7 @@ not to change before the listed stage.
 | H9 | P3 QR covariance | FAST 6x6 PCA covariance | Prob 4x4 QR covariance | P4/provider | `include/prob_livo/super_native/prob_qr_plane.h`; `src/prob_livo/prob_lio_backend.cpp:307-315` | I3/I5 | CLOSED/PASS — Owner audit pending |
 | H10 | LiDAR association | FAST `build_single_residual` gate | Super legacy gate | LIO residual construction | `include/prob_livo/super_native/prob_qr_plane.h`; `src/prob_livo/prob_lio_backend.cpp:300-326` | I3 | CLOSED/PASS — Owner audit pending |
 | H11 | P4 weighting | FAST active variance weight | Prob P4 `w=1/R_i` | IESKF information update | `include/prob_livo/super_native/prob_geometry_p0_p4.h`; `src/prob_livo/prob_lio_backend.cpp:335-355` | I3 | CLOSED/PASS — Owner audit pending |
-| H12 | current scan output | `VoxelMapManager::pv_list_` | `pointWithVar`-compatible adapter | FAST VIO shell | FAST `pointWithVar` ABI, `include/common_lib.h:102-123` | I4 | NOT STARTED |
+| H12 | current scan output | `VoxelMapManager::pv_list_` | `pointWithVar`-compatible adapter | FAST VIO shell | FAST `pointWithVar` ABI, `include/common_lib.h:102-123`; `ProbPointWithVarAdapter` | I4 | CLOSED/PASS — Owner audit pending |
 | H13 | visual plane provider | direct FAST map lookup | `VisualPlanePrior` adapter from OctVox/HKNN/QR/P3 | VIO plane/raycast paths | provider contract in §6 | I5 | NOT STARTED |
 | H14 | visual 3σ consistency gate | `updateReferencePatch` | unchanged FAST gate | visual point lifecycle | FAST `src/vio.cpp:969-1021` | I6 | FROZEN UNTIL I6 |
 | H15 | VIO update on x19/P19 | `VIOManager::updateState*` | unchanged visual update over shared state | shared estimator | FAST `src/vio.cpp:1398-1680` | I6 | FROZEN UNTIL I6 |
@@ -315,8 +315,8 @@ no reliance on old build/ or devel/
 | I0 | Host / contract freeze | CLOSED / OWNER VERIFIED |
 | I1 | `ProbESKF19` | CLOSED / OWNER VERIFIED |
 | I2 | Super IMU + undistort under LIVO2 scheduler | CLOSED / OWNER VERIFIED |
-| I3 | Prob-LIO P0–P4 backend, camera OFF + Super-input corrective | CLOSED/PASS — Owner audit pending; `SUPER_INPUT_TRAJECTORY_NEAR_PARITY` |
-| I4 | `pointWithVar`-compatible current-scan adapter | NOT STARTED |
+| I3 | Prob-LIO P0–P4 backend, camera OFF + Super-input corrective | CLOSED / OWNER VERIFIED; `NUMERIC_IMPLEMENTATION_DIFFERENCE_CONFIRMED` |
+| I4 | `pointWithVar`-compatible current-scan adapter | CLOSED/PASS — Owner audit pending |
 | I5 | `ProbPlaneProvider` | NOT STARTED |
 | I6 | camera ON / FAST-LIVO2 visual sequential closure | NOT STARTED |
 | I7 | visual-gate + downsample ablations | NOT STARTED |
