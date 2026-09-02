@@ -7,6 +7,7 @@ namespace prob_livo_test {
 int RunP4MapTimingTests(TestContext &context) {
   StatesGroup state;
   auto options = TestBackendOptions();
+  options.legacy_super_timing = true;
   prob_livo::ProbLioBackend backend(state, options);
   const auto points = MakePlanePoints();
 
@@ -47,8 +48,8 @@ int RunP4MapTimingTests(TestContext &context) {
   run_packet.pcl_proc_cur->points.front().curvature = 80.0f;
   context.Check(backend.ProcessEpoch(run_packet),
                 "first RUN timing bridge rejected the epoch");
-  context.Check(std::abs(backend.filter_current_time() - 0.55) < 1e-12,
-                "first RUN epoch did not reach its endpoint");
+  context.Check(std::abs(backend.filter_current_time() - 0.545) < 1e-12,
+                "legacy first RUN epoch consumed a post-endpoint look-ahead");
   context.Check(std::abs(backend.last_observation_time() - 0.55) < 1e-12,
                 "first RUN observation boundary did not advance");
   context.Check(backend.undistorted_scan()->size() == points.size(),
@@ -63,6 +64,28 @@ int RunP4MapTimingTests(TestContext &context) {
   context.Check(state.cov.allFinite(),
                 "first RUN covariance is not finite");
   context.Record("G-P4.4 first_run_time", backend.filter_current_time());
+
+  // FAST-native retains the original endpoint-bounded point contract.  The
+  // Super post-endpoint exception must not leak into the native mode.
+  StatesGroup native_state;
+  prob_livo::ProbLioBackend native_backend(native_state,
+                                           TestBackendOptions());
+  for (int index = 0; index < 54; ++index) {
+    const double start = 0.01 * index;
+    const auto imu = std::vector<prob_livo::ImuSample>{
+        {start + 0.005, Eigen::Vector3d(0.0, 0.0, 9.7946),
+         Eigen::Vector3d::Zero()}};
+    LidarMeasureGroup packet =
+        MakeBackendEpoch(start, start + 0.01, imu, points);
+    context.Check(native_backend.ProcessEpoch(packet),
+                  "FAST-native timing fixture rejected an init/map epoch");
+  }
+  LidarMeasureGroup native_run_packet =
+      MakeBackendEpoch(0.54, 0.55, run_imu, points, lookahead);
+  native_run_packet.lidar_frame_beg_time = 0.48;
+  native_run_packet.pcl_proc_cur->points.front().curvature = 80.0f;
+  context.Check(!native_backend.ProcessEpoch(native_run_packet),
+                "Super post-endpoint handling leaked into FAST-native mode");
 
   // Legacy Super does not consume the first IMU after the scan endpoint as a
   // look-ahead.  Keep this mode-specific seam covered without changing the

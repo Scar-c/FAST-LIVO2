@@ -245,7 +245,9 @@ ProbImuAdapter::Result ProbImuAdapter::ProcessLioEpoch(
   for (const PointType &point : measures.pcl_proc_cur->points) {
     const double query_time = timing.point_time_origin +
                               static_cast<double>(point.curvature) / 1000.0;
-    if (!std::isfinite(query_time)) {
+    if (!std::isfinite(query_time) ||
+        (options_.bridge_to_epoch_endpoint &&
+         query_time > timing.epoch_end + options_.time_tolerance)) {
       SetFailure(result, "scheduler point time is outside the LIO epoch");
       return result;
     }
@@ -316,7 +318,13 @@ bool ProbImuAdapter::Undistort(const LidarMeasureGroup &measures,
       message = "point query time is outside the propagated trace";
       return false;
     }
-    if (query_time <= trace.front().timestamp + tolerance) {
+    if (options_.bridge_to_epoch_endpoint &&
+        query_time > trace.back().timestamp + tolerance) {
+      message = "point query time is outside the propagated trace";
+      return false;
+    }
+    if (!options_.bridge_to_epoch_endpoint &&
+        query_time <= trace.front().timestamp + tolerance) {
       if (trace.size() < 2) {
         message = "propagated trace has no interval for an early point";
         return false;
@@ -344,7 +352,8 @@ bool ProbImuAdapter::Undistort(const LidarMeasureGroup &measures,
           // source acquisition time is after the scan endpoint in the
           // LiDAR->IMU frame. This is required for the legacy Ouster
           // source-order/end-time contract.
-          if (query_time > trace.back().timestamp) {
+          if (!options_.bridge_to_epoch_endpoint &&
+              query_time > trace.back().timestamp) {
             const Eigen::Vector3d raw(input.x, input.y, input.z);
             const Eigen::Vector3d lidar_in_imu =
                 options_.lidar_to_imu_rotation * raw +
@@ -357,20 +366,25 @@ bool ProbImuAdapter::Undistort(const LidarMeasureGroup &measures,
 
           PropagationSnapshot interpolated;
           if (query_time <= trace.front().timestamp + tolerance) {
-            const PropagationSnapshot &head = trace.front();
-            const PropagationSnapshot &tail = trace[1];
-            const double dt = tail.timestamp - head.timestamp;
-            const double tau = query_time - head.timestamp;
-            const double ratio = tau / dt;
-            interpolated.timestamp = query_time;
-            const Eigen::Vector3d relative_log =
-                LogSO3(head.rotation.transpose() * tail.rotation);
-            interpolated.rotation = head.rotation * ExpSO3(relative_log * ratio);
-            interpolated.position = head.position + head.velocity * tau +
-                                    0.5 * tail.acceleration * tau * tau;
-            interpolated.velocity = head.velocity;
-            interpolated.acceleration = tail.acceleration;
-            interpolated.angular_velocity = tail.angular_velocity;
+            if (options_.bridge_to_epoch_endpoint) {
+              interpolated = trace.front();
+            } else {
+              const PropagationSnapshot &head = trace.front();
+              const PropagationSnapshot &tail = trace[1];
+              const double dt = tail.timestamp - head.timestamp;
+              const double tau = query_time - head.timestamp;
+              const double ratio = tau / dt;
+              interpolated.timestamp = query_time;
+              const Eigen::Vector3d relative_log =
+                  LogSO3(head.rotation.transpose() * tail.rotation);
+              interpolated.rotation =
+                  head.rotation * ExpSO3(relative_log * ratio);
+              interpolated.position = head.position + head.velocity * tau +
+                                      0.5 * tail.acceleration * tau * tau;
+              interpolated.velocity = head.velocity;
+              interpolated.acceleration = tail.acceleration;
+              interpolated.angular_velocity = tail.angular_velocity;
+            }
           } else if (query_time >= trace.back().timestamp - tolerance) {
             interpolated = trace.back();
           } else {
