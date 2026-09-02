@@ -81,6 +81,7 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   sensor_msgs
   roscpp
+  rosbag
   rospy
   std_msgs
   pcl_ros
@@ -103,7 +104,7 @@ set(Sophus_LIBRARIES libSophus.so)
 
 # Define the catkin package
 catkin_package(
-  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy std_msgs message_runtime cv_bridge vikit_common vikit_ros image_transport
+  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rosbag rospy std_msgs message_runtime cv_bridge vikit_common vikit_ros image_transport
   DEPENDS EIGEN3 PCL OpenCV Sophus
 )
 
@@ -141,6 +142,25 @@ target_link_libraries(prob_livo_backend
   ${OpenMP_CXX_FLAGS}
 )
 target_link_libraries(laser_mapping prob_livo_backend)
+
+# Offline production runner: the bag reader is transport-only and feeds the
+# same FAST/LIVO2 callbacks and scheduler used by fastlivo_mapping.
+add_executable(prob_livo_offline
+  tools/prob_livo/prob_livo_offline.cpp
+  src/prob_livo/offline_reader.cpp
+)
+target_link_libraries(prob_livo_offline
+  laser_mapping
+  vio
+  lio
+  pre
+  imu_proc
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Sophus_LIBRARIES}
+  ${Boost_LIBRARIES}
+)
 
 # I1/I2 estimator code is deliberately non-wired.  The executable keeps the
 # existing FAST-LIVO2 runtime path until the later scheduler-owned stages.

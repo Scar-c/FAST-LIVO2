@@ -239,8 +239,7 @@ ProbImuAdapter::Result ProbImuAdapter::ProcessLioEpoch(
   for (const PointType &point : measures.pcl_proc_cur->points) {
     const double query_time = timing.point_time_origin +
                               static_cast<double>(point.curvature) / 1000.0;
-    if (!std::isfinite(query_time) ||
-        query_time < timing.epoch_start - options_.time_tolerance) {
+    if (!std::isfinite(query_time)) {
       SetFailure(result, "scheduler point time is outside the LIO epoch");
       return result;
     }
@@ -309,8 +308,7 @@ bool ProbImuAdapter::Undistort(const LidarMeasureGroup &measures,
     undistorted = input;
     const double query_time = timing.point_time_origin +
                               static_cast<double>(input.curvature) / 1000.0;
-    if (!std::isfinite(query_time) ||
-        query_time < trace.front().timestamp - tolerance) {
+    if (!std::isfinite(query_time)) {
       message = "point query time is outside the propagated trace";
       return false;
     }
@@ -330,19 +328,40 @@ bool ProbImuAdapter::Undistort(const LidarMeasureGroup &measures,
       continue;
     }
 
-    const double bounded_query_time =
-        std::max(trace.front().timestamp,
-                 std::min(trace.back().timestamp, query_time));
-
     PropagationSnapshot interpolated;
-    if (bounded_query_time <= trace.front().timestamp + tolerance) {
-      interpolated = trace.front();
-    } else if (bounded_query_time >= trace.back().timestamp - tolerance) {
+    if (query_time <= trace.front().timestamp + tolerance) {
+      // Super's matching loop defaults to the first propagation interval when
+      // a source-ordered point predates the trace front. This is a small
+      // backward extrapolation caused by overlapping scan windows, and must
+      // not reject the whole scan.
+      if (trace.size() < 2) {
+        message = "propagated trace has no interval for an early point";
+        return false;
+      }
+      const PropagationSnapshot &head = trace.front();
+      const PropagationSnapshot &tail = trace[1];
+      const double dt = tail.timestamp - head.timestamp;
+      if (!(dt > tolerance)) {
+        message = "propagated trace has an invalid first interval";
+        return false;
+      }
+      const double tau = query_time - head.timestamp;
+      const double ratio = tau / dt;
+      interpolated.timestamp = query_time;
+      const Eigen::Vector3d relative_log =
+          LogSO3(head.rotation.transpose() * tail.rotation);
+      interpolated.rotation = head.rotation * ExpSO3(relative_log * ratio);
+      interpolated.position =
+          head.position + head.velocity * tau + 0.5 * tail.acceleration * tau * tau;
+      interpolated.velocity = head.velocity;
+      interpolated.acceleration = tail.acceleration;
+      interpolated.angular_velocity = tail.angular_velocity;
+    } else if (query_time >= trace.back().timestamp - tolerance) {
       interpolated = trace.back();
     } else {
       std::size_t upper = 1;
       while (upper < trace.size() &&
-             trace[upper].timestamp < bounded_query_time) {
+             trace[upper].timestamp < query_time) {
         ++upper;
       }
       if (upper >= trace.size()) {
@@ -354,9 +373,9 @@ bool ProbImuAdapter::Undistort(const LidarMeasureGroup &measures,
         if (!(dt > tolerance)) {
           interpolated = tail;
         } else {
-          const double tau = bounded_query_time - head.timestamp;
+          const double tau = query_time - head.timestamp;
           const double ratio = tau / dt;
-          interpolated.timestamp = bounded_query_time;
+          interpolated.timestamp = query_time;
           interpolated.rotation =
               Eigen::Quaterniond(head.rotation)
                   .slerp(ratio, Eigen::Quaterniond(tail.rotation))

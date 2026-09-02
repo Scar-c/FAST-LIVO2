@@ -37,10 +37,14 @@ int RunP4MapTimingTests(TestContext &context) {
       0.555, Eigen::Vector3d(0.0, 0.0, 9.7946), Eigen::Vector3d::Zero()});
   LidarMeasureGroup run_packet = MakeBackendEpoch(
       0.54, 0.55, run_imu, points, lookahead);
+  // Exercise both sides of the Super source-order boundary with finite point
+  // times: the first point is after the endpoint, while the second predates
+  // the propagation trace front because the scan windows overlap.
+  run_packet.lidar_frame_beg_time = 0.48;
   // Super Ouster source order can place a point after the endpoint defined by
   // the final accepted sampled point. The legacy undistorter keeps that point
   // in the raw LiDAR->IMU frame instead of rejecting the whole epoch.
-  run_packet.pcl_proc_cur->points.front().curvature = 20.0f;
+  run_packet.pcl_proc_cur->points.front().curvature = 80.0f;
   context.Check(backend.ProcessEpoch(run_packet),
                 "first RUN timing bridge rejected the epoch");
   context.Check(std::abs(backend.filter_current_time() - 0.55) < 1e-12,
