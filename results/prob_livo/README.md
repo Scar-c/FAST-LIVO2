@@ -30,8 +30,39 @@ an explicit rosbag topic audit. The files were only inventoried here.
 
 The legacy evaluator contract is available at
 `/home/lc/prob_lio/src/Super-LIO/eval/prob_lio/eval_ntu_viral_official.py`.
-It was not copied in Prompt 0. Dataset topics/config provenance must be
-rechecked for the host integration before use.
+Prompt 3 copied the evaluator and GT conversion wrapper on demand into the
+host at `eval/prob_livo/`.
+
+## Prompt 3 canonical EEE01 camera-OFF run
+
+The whole-bag run used one FAST ROS node and the camera-OFF
+`ProbLioBackend` P0–P4 path. Only `/imu/imu` and
+`/os1_cloud_node1/points` were replayed. The ignored, unique evidence bundle
+is:
+
+`runs/eee01_camera_off_p0_p4_retry/`
+
+```text
+bag SHA256: 7ea43946cffdd49c88d993ad3f192a4e90a8f6826eddc2ef1a9d4f5343ca6c17
+host HEAD at run: ce805bb8e02eb234d004a6e2d1c54ed35bfc1ba5
+camera: OFF
+backend: ProbLioBackend P0-P4
+play/node/GT/evaluator/run RC: 0/0/0/0/0
+trajectory rows: 3595
+official NTU ATE RMSE: 0.05290159739482509 m
+official matched: 3016
+```
+
+The legacy P4 trajectory used for the required primary raw comparison is
+`/home/lc/prob_lio/src/Super-LIO/results/prob_lio/p11_smoke_eee_p4_lc/trajectory.tum`.
+The comparison matched 3594 rows and produced translation RMSE
+`0.1272755745726123 m`, rotation RMSE `0.01831955642234057 rad`, with
+`alignment: NONE_RAW_WORLD_FRAMES` and the single classification
+`I3_TRAJECTORY_CLOSE_NONIDENTICAL`. The official evaluator's internal
+`SE3_UMEYAMA_NO_SCALE` is not used for that raw comparison.
+
+The canonical command is `tools/prob_livo/run_eee01_camera_off.sh`; it
+requires a clean worktree and refuses to overwrite an existing run directory.
 
 ## Oxford Spires
 

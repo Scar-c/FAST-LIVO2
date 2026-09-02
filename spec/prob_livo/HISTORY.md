@@ -68,3 +68,42 @@ LiDAR-frame `feats_undistort` or `VoxelMapManager`; the default runtime stays
 on FAST `Process2` until I3 supplies the matching Prob-LIO map backend. No
 OctVox/P1–P4, VIO change, camera runtime, bag run, or I3 work belongs to this
 stage.
+
+## Prompt 3 / I3 — camera-OFF Prob-LIO P0–P4 baseline
+
+Prompt 3 first closed the I2 lifecycle seam in commit `27854c0`: one explicit
+`ProbLioLifecycle` authority now owns `IMU_INIT → MAP_INIT → RUN`, the
+scheduler epoch anchor is separate from the filter clock, and the anchor is
+advanced once only after a successful epoch. The production scheduler helper
+and IMU-buffer look-ahead behavior are covered by the I2 lifecycle and buffer
+tests.
+
+The camera-OFF backend was then added in `30e5e3e`. `ProbLioBackend` owns the
+shared `ProbESKF19`, Super IMU adapter, Prob OctVox map, scan buffers, and
+trajectory. It uses raw LiDAR for four map-init scans, then runs Super
+downsample, HKNN, QR/P3, P1/P2 covariance, Super legacy association, P4
+weighting, ProbESKF19 LiDAR update, and covariance-aware map update. FAST
+remains the ROS/scheduler shell. Camera loading/subscription, VIO processing,
+and the FAST LiDAR voxel map are disabled in this baseline; P5 remains
+excluded.
+
+The canonical runner is
+`tools/prob_livo/run_eee01_camera_off.sh`. It requires a clean worktree,
+starts one local ROS master and one FAST node, replays only EEE01 IMU/LiDAR,
+and stores an ignored, self-describing run directory. The path-fix and isolated
+ROS-home corrections are `e1c63cb` and `ce805bb`. The complete run
+`results/prob_livo/runs/eee01_camera_off_p0_p4_retry/` returned zero for bag
+playback, node shutdown, GT extraction, evaluation, and the overall run.
+
+Using the NTU VIRAL dataset-author evaluator, the baseline achieved
+translation ATE RMSE `0.05290159739482509 m` over 3016 matched estimates. The
+same evaluator was applied to the legacy P4 reference artifact
+`p11_smoke_eee_p4_lc` (`0.08883155405698266 m`, 3329 matched). The required
+primary comparison uses raw world frames without mutual SE(3) alignment: 3594
+matched rows, translation RMSE `0.1272755745726123 m`, rotation RMSE
+`0.01831955642234057 rad`, classified exactly once as
+`I3_TRAJECTORY_CLOSE_NONIDENTICAL`.
+
+I3 is closed/owner-verified. The next stage is I4, the
+`pointWithVar`-compatible current-scan adapter; camera-ON visual closure is
+still reserved for I6.

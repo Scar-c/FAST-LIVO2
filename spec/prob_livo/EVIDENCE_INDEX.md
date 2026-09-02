@@ -1,10 +1,11 @@
 # Prob-LIVO Evidence Index
 
 Prompt 0 evidence is source identity, source audit, build output, and file
-inventory only. No bag-run or accuracy evidence is claimed. Prompt 1 evidence
-adds deterministic filter-core parity and host-build gates. Prompt 2 evidence
-adds the terminal callback corrective and deterministic Super-native
-IMU/undistortion seam tests; it still claims no bag-run evidence.
+inventory only. Prompt 1 evidence adds deterministic filter-core parity and
+host-build gates. Prompt 2 evidence adds the terminal callback corrective and
+deterministic Super-native IMU/undistortion seam tests. Prompt 3 adds the
+camera-OFF Prob-LIO P0–P4 backend, required component gates, and one canonical
+whole-bag EEE01 baseline run.
 
 ## Repository identity
 
@@ -76,9 +77,8 @@ Prob-LIO experimental P5: include/lio/point_covariance.h:369-601; src/lio/super_
 ## Dataset inventory evidence
 
 See `../../results/prob_livo/README.md` for the complete lightweight listing
-of NTU/OXFORD bags, metadata, sizes, and future stage notes. Camera calibration
-files are present in the inventory. Camera-topic presence remains pending an
-explicit rosbag topic audit; no bag was run.
+of NTU/OXFORD bags, metadata, sizes, and stage notes. Prompt 3 records the
+camera-OFF EEE01 run below; no other dataset was run.
 
 ## Prompt 0 commit evidence
 
@@ -221,3 +221,96 @@ Return code: `0`. No rosbag or dataset was run. No OctVox/P1–P4 backend, VIO
 behavior, camera runtime, or I3 work was started. `include/common_lib.h` and
 `src/vio.cpp` remain unchanged from the I2 start. Final worktree cleanliness,
 final HEAD, and push result are recorded after the close commit below.
+
+## Prompt 3 / I3 evidence
+
+```text
+Prompt 3 source: /home/lc/super_livo/prompts/prompt3_i2_close_i3_eee01_baseline.md
+Prompt registration: prompts/prob_livo/prompt3_i2_close_i3_prob_lio_baseline.md
+Prompt registration SHA256: 2a46d4c2950d9fb7537766e3af3e23ce4b32c0ed5840ecfae0e7d8b831f72319
+Prompt 3 implementation start: 27854c0
+I3 backend commit: 30e5e3e
+Runner path-fix commit: e1c63cb
+Runner ROS-home fix: ce805bb
+Prob-LIO reference SHA: 9fc949f46291c0fa76e5b7cdb372c940eb4b3f6e
+```
+
+### I3 source and ownership audit
+
+The production backend is `include/prob_livo/prob_lio_backend.h` and
+`src/prob_livo/prob_lio_backend.cpp`. It owns the lifecycle authority, shared
+`ProbESKF19`, Super-native IMU adapter, map, scan buffers, and trajectory. The
+FAST shell changes are limited to backend construction/dispatch and camera-OFF
+guards in `src/LIVMapper.cpp`; no second LIO map or filter is instantiated.
+
+The P0–P4 source paths are copied on demand into
+`include/prob_livo/super_native/` with the reference provenance retained in the
+Prompt 3 commit. The imported path covers `VoxelGridClosest`, Prob OctVox,
+HKNN, QR/P3, P1/P2 covariance, Super legacy association, and P4 weighting.
+The reduced `basic/alias.h` contains only the required basic aliases, avoiding
+duplicate host sensor-point registrations. No P5 implementation is wired.
+
+### I3 focused gates and build
+
+```bash
+cmake -S /home/lc/super_livo/src -B /home/lc/super_livo/build
+cmake --build /home/lc/super_livo/build --target prob_livo_backend fastlivo_mapping -j2
+/home/lc/super_livo/devel/lib/fast_livo/prob_livo_i3_tests
+```
+
+All commands returned `0`. `prob_livo_i3_tests` reported
+`[PASS] G-I3 P0-P4 backend and native component gates checks=79`. The test
+modules cover map-init lifecycle and raw insertion, Super downsampling, point
+covariance, OctVox insertion/query, HKNN, QR/P3 covariance, association
+weighting, and the backend seam. The I2 regression suite also remained green
+after the runtime handoff patch: G-I2.1 through G-I2.9 all PASS.
+
+### I3 canonical runtime evidence
+
+The runner is `tools/prob_livo/run_eee01_camera_off.sh`. It rejects a dirty
+tree and an existing run directory, starts a dedicated local ROS master,
+starts exactly one `fastlivo_mapping` node, loads `config/NTU_VIRAL.yaml`,
+forces `/common/img_en=0`, enables `ProbLioBackend`, replays only
+`/imu/imu` and `/os1_cloud_node1/points`, extracts `/leica/pose/relative`, and
+runs the copied legacy evaluator. Its complete ignored output is:
+
+`results/prob_livo/runs/eee01_camera_off_p0_p4_retry/`
+
+```text
+run HEAD: ce805bb8e02eb234d004a6e2d1c54ed35bfc1ba5
+bag SHA256: 7ea43946cffdd49c88d993ad3f192a4e90a8f6826eddc2ef1a9d4f5343ca6c17
+config SHA256: c8f94f130e599b928c3f02c3f3d3b2009ae01df76aec32f6ac96b6a987311ef3
+camera: OFF
+backend: ProbLioBackend P0-P4
+replayed topics: /imu/imu, /os1_cloud_node1/points
+play/node/GT/evaluator/run RC: 0/0/0/0/0
+trajectory rows: 3595
+```
+
+The evaluator wrapper is `eval/prob_livo/eval_ntu_viral_official.py`, SHA256
+`092beba2b99ac02cfbb1d30b1c0b1ec49cf2b41203090a81c66eb0d0824187dd`. It
+reported the NTU VIRAL dataset-author metric
+`NTU_VIRAL_DATASET_TRANSLATION_ATE_RMSE_M = 0.05290159739482509` with 3016
+matched estimates. The legacy P4 reference artifact is
+`/home/lc/prob_lio/src/Super-LIO/results/prob_lio/p11_smoke_eee_p4_lc/trajectory.tum`
+(3981 rows; SHA256
+`259d3fbc16e5b918a75d5517c4f5feac0b29e40b7c6d5464f881185704595199`).
+
+The primary comparison command was:
+
+```bash
+python3 tools/prob_livo/compare_trajectories.py \
+  /home/lc/prob_lio/src/Super-LIO/results/prob_lio/p11_smoke_eee_p4_lc/trajectory.tum \
+  results/prob_livo/runs/eee01_camera_off_p0_p4_retry/trajectory.tum \
+  --out results/prob_livo/runs/eee01_camera_off_p0_p4_retry/trajectory_comparison.json
+```
+
+It matched 3594 rows, with raw translation RMSE `0.1272755745726123 m`, raw
+rotation RMSE `0.01831955642234057 rad`, and
+`alignment: NONE_RAW_WORLD_FRAMES`. The exactly-one result is
+`I3_TRAJECTORY_CLOSE_NONIDENTICAL`; the official evaluator's internal
+`SE3_UMEYAMA_NO_SCALE` is not used for this raw comparison.
+
+No tuning, sweep, duplicate bag/mapper, camera/VIO runtime, or P5 path was
+used. Final worktree cleanliness, final HEAD, and push result are recorded by
+the evidence-close commit and the final handoff report.
