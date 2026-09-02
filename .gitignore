@@ -1,2 +1,7 @@
 Log/*
 build/*
+
+# Prob-LIVO runtime outputs stay outside the tracked evidence/docs surface.
+results/prob_livo/runs/
+results/prob_livo/logs/
+results/prob_livo/tmp/
