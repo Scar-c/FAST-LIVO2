@@ -12,8 +12,9 @@ under ignored `runs/`, `logs/`, or `tmp/` directories.
 Every NTU sequence has camera calibration (`camera_left.yaml`,
 `camera_right.yaml`), IMU calibration (`imu_v100.yaml`), LiDAR calibration
 (`lidar_horz.yaml`, `lidar_vert.yaml`), Leica prism metadata
-(`leica_prism.yaml`), and UWB metadata (`uwb_nodes.yaml`). Camera data is
-therefore available in the bags; the files were only inventoried here.
+(`leica_prism.yaml`), and UWB metadata (`uwb_nodes.yaml`). Camera calibration
+is therefore present in the inventory; camera-topic presence remains pending
+an explicit rosbag topic audit. The files were only inventoried here.
 
 | Sequence | Bag | Size (bytes) | Evaluator/config availability | Intended stage |
 |---|---|---:|---|---|

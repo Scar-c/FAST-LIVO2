@@ -17,3 +17,6 @@ prompts may split a production seam, but may not silently change stage
 ownership, the one-state contract, or the P0–P4/P5 boundary.
 
 Prompt 0 is complete at bootstrap only. Next stage: I1 `ProbESKF19`.
+
+The exact Prompt 1 text is registered at
+`prompts/prob_livo/prompt1_prob_eskf19.md`.

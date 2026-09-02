@@ -1,7 +1,9 @@
 # Prob-LIVO Evidence Index
 
 Prompt 0 evidence is source identity, source audit, build output, and file
-inventory only. No bag-run or accuracy evidence is claimed.
+inventory only. No bag-run or accuracy evidence is claimed. Prompt 1 evidence
+adds deterministic filter-core parity and host-build gates; it still claims no
+bag-run evidence.
 
 ## Repository identity
 
@@ -73,15 +75,66 @@ Prob-LIO experimental P5: include/lio/point_covariance.h:369-601; src/lio/super_
 ## Dataset inventory evidence
 
 See `../../results/prob_livo/README.md` for the complete lightweight listing
-of NTU/OXFORD bags, metadata, sizes, and future stage notes. No bag was run.
+of NTU/OXFORD bags, metadata, sizes, and future stage notes. Camera calibration
+files are present in the inventory. Camera-topic presence remains pending an
+explicit rosbag topic audit; no bag was run.
 
 ## Prompt 0 commit evidence
 
-Filled after the focused bootstrap commit is created:
+The two focused I0 commits are:
 
 ```text
-Prompt 0 commit: this focused bootstrap commit; final SHA is reported with `git rev-parse HEAD`
-Final HEAD: reported with `git rev-parse HEAD`
+I0 bootstrap commit: 7dac83e726a32bc2a8551f445322959a523cbba3
+I0 final/push-record commit: 9ed486cc9e78f075ec74f3c9c48eb2a0efcc0c1b
+I0 final HEAD: 9ed486cc9e78f075ec74f3c9c48eb2a0efcc0c1b
 Final worktree: clean after commit
-Push status: success; `origin/prob-livo` created at the bootstrap commit
+Push status: success; `origin/prob-livo` recorded at the I0 final commit
+```
+
+## Prompt 1 / I1 evidence
+
+```text
+I1 start HEAD: 9ed486cc9e78f075ec74f3c9c48eb2a0efcc0c1b
+Reference SHA: 9fc949f46291c0fa76e5b7cdb372c940eb4b3f6e
+Prompt registration: prompts/prob_livo/prompt1_prob_eskf19.md
+Prompt registration SHA256: 7e90c582356715a6d53d73f10b6888ef01f365bb77c19769b427d3af79a2efda
+Oracle: tests/prob_livo/oracle/super_eskf_oracle.h, reference SHA above,
+        ESKF.cpp Predict 187-249 / UpdateObserve 251-336
+```
+
+Focused test command and result:
+
+```bash
+source /home/lc/design_ws/devel/setup.bash
+/home/lc/super_livo/devel/lib/fast_livo/prob_livo_i1_tests
+```
+
+Return code: `0`. The runner reports PASS for G-I1.1 through G-I1.8 with
+deterministic dense-SPD and negative fixtures. Maximum observed parity errors
+were: update physical covariance `6.26e-13`, nonzero-cross full P19 predict
+`1.14e-13`, update state `2.93e-15`, and covariance symmetry `9.06e-14`.
+
+Full build command and result:
+
+```bash
+source /home/lc/design_ws/devel/setup.bash
+catkin_make --pkg fast_livo
+```
+
+Return code: `0`; existing `fastlivo_mapping` and host libraries linked, and
+the isolated `prob_livo_i1_tests` target linked. No runtime executable was
+launched and no rosbag was run.
+
+Scope audit: `include/common_lib.h` and `src/vio.cpp` have no diff from the I1
+start; no `LIVMapper` callsite references `ProbESKF19`; no scheduler,
+undistortion, OctVox, P1–P4, VIO, or P5 integration was made.
+
+Final commit fields are filled after the focused I1 commit and fast-forward
+push:
+
+```text
+I1 commit: pending final commit
+Final HEAD: pending final commit
+Final worktree: pending final clean check
+Push status: pending fast-forward push to origin/prob-livo
 ```

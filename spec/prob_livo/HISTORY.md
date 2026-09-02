@@ -20,3 +20,11 @@ host/reference identities, audited production source seams, inventoried the
 local NTU/OXFORD files, and built the untouched host with the existing VIKIT
 dependency overlay. No legacy runtime/evaluator asset was imported. Future
 imports follow COPY-ON-DEMAND with source commit/path provenance.
+
+## State-operation authority decision
+
+FAST `StatesGroup` operators are retained for FAST visual semantics and ABI.
+`ProbESKF19` owns canonical Super semantics for the future LIO path. FAST's
+additive gravity operator differs from Super's gravity normalization, so direct
+use of `StatesGroup::operator+=` in LIO is forbidden. I6 will later observe
+visual-induced gravity correction rather than changing VIO in this stage.

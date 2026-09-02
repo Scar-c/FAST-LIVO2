@@ -1,6 +1,7 @@
 # Prob-LIVO Integration Specification
 
-Status: Prompt 0 / I0 bootstrap; current status is `CLOSED/PASS pending Owner audit`.
+Status: Prompt 1 / I1 filter core; I0 is `CLOSED / OWNER VERIFIED` and I1 is
+`IN PROGRESS` until all gates and the push are complete.
 
 This is the single current-truth authority for the FAST-LIVO2-hosted Prob-LIVO
 integration. Historical notes and future prompts must not redefine these
@@ -306,8 +307,8 @@ no reliance on old build/ or devel/
 
 | Stage | Meaning | Status |
 |---|---|---|
-| I0 | Host / contract freeze | CLOSED/PASS pending Owner audit |
-| I1 | `ProbESKF19` | NOT STARTED |
+| I0 | Host / contract freeze | CLOSED / OWNER VERIFIED |
+| I1 | `ProbESKF19` | IN PROGRESS |
 | I2 | Super IMU + undistort under LIVO2 scheduler | NOT STARTED |
 | I3 | Prob-LIO P0–P4 backend, camera OFF | NOT STARTED |
 | I4 | `pointWithVar`-compatible current-scan adapter | NOT STARTED |
@@ -358,8 +359,9 @@ The lightweight inventory is maintained in
 open or run the bags. Current sequences are NTU `eee_01..03`, `nya_01..03`,
 `sbs_01..03`, and Oxford `Church_05`, `College_03`, `Palace_01`,
 `Quarter_01`, plus Oxford calibration files. NTU has camera calibration,
-LiDAR, IMU, Leica prism, and UWB metadata per sequence; Oxford has camera/IMU
-and LiDAR/IMU calibration plus TUM ground truth. The legacy official NTU
+LiDAR, IMU, Leica prism, and UWB metadata per sequence; camera-topic presence
+is pending an explicit rosbag topic audit. Oxford has camera/IMU and LiDAR/IMU
+calibration plus TUM ground truth. The legacy official NTU
 evaluator and Oxford TUM evaluator are available at the legacy workspace path,
 but neither was copied or executed.
 
@@ -382,14 +384,15 @@ time because `vikit_common` was not discoverable. The same unmodified host
 then built successfully with the existing local dependency overlay. This is
 recorded as environment diagnosis, not a source workaround.
 
-## 13. Prompt 0 completion boundary
+## 13. Prompt 0 completion boundary (historical)
 
 Prompt 0 does not implement I1 and does not begin a bag run. The project stops
 after documentation, hygiene, baseline build, and audit evidence.
 
 ```text
-I0 = CLOSED/PASS — Owner audit pending
-I1–I8 = NOT STARTED
+I0 = CLOSED / OWNER VERIFIED
+I1 = the next stage after this historical bootstrap boundary
+I2–I8 = NOT STARTED
 
 HOST authority   = FAST-LIVO2
 LIO authority    = canonical Prob-LIO P0–P4
@@ -397,3 +400,116 @@ Visual authority = FAST-LIVO2 public source
 
 Next stage = I1 ProbESKF19
 ```
+
+## 14. Prompt 1 / I1 — ProbESKF19 filter core
+
+I1 implements the shared-state ESKF seam only. It does not wire the core into
+`LIVMapper`, the scheduler, VIO, undistortion, OctVox, or any dataset runner.
+The final stage status is `CLOSED/PASS — Owner audit pending` only after the
+gate ledger below, the host build, and the fast-forward push are recorded.
+
+### 14.1 State and layout
+
+`include/prob_livo/prob_eskf19.h` centralizes the host layout constants and the
+bijective physical index list:
+
+```text
+host:     R[0:3] p[3:6] exposure[6] v[7:10] bg[10:13] ba[13:16] g[16:19]
+physical: R[0:3] p[3:6] v[6:9] bg[9:12] ba[12:15] g[15:18]
+indices:  0 1 2 3 4 5 7 8 9 10 11 12 13 14 15 16 17 18
+```
+
+Vector, covariance, `F_X`, and `F_W` embeddings all use that list. Dense
+off-diagonal terms are preserved; exposure is an identity/no-direct-noise
+state in `F_X`/`F_W` and is handled explicitly in `P_ee` when its configurable
+random walk is enabled.
+
+`ProbESKF19` stores a reference to the caller-owned `StatesGroup`. Its only
+persistent members beyond options and diagnostics are IMU timing/history
+bookkeeping; it does not duplicate x19 or P19. `ApplySuperLioIncrement19` is a
+dedicated LIO retraction: right SO(3) exponential, additive Euclidean blocks,
+and gravity addition followed by normalization to `gravity_norm`. FAST's
+original `StatesGroup` operators remain untouched for visual ABI semantics.
+
+### 14.2 Predict and update authority
+
+Predict ports the active Super equations from
+`ref/Super-LIO/src/super_lio/src/lio/ESKF.cpp:187-249`: midpoint IMU values,
+pre-rotation nominal acceleration, right Jacobian, exact physical `F_X`/`F_W`,
+Super noise-entry convention, and full P19 propagation through the centralized
+embedding. Exposure mean is constant. Its default process is frozen; enabling
+the option adds `cov_inv_expo * dt^2` to `P_ee`, with no direct physical/exposure
+transition.
+
+Update ports `ESKF.cpp:251-336`: frozen predicted snapshot and covariance,
+per-iteration right-error prior/reset Jacobian, pose-only 6x6 information
+embedded at host indices 0–5, full 19D information solve, Super retraction,
+iteration-count/`need_converge` behavior, final rotational covariance reset, and
+symmetrization. The 6x6 callback cannot directly measure exposure; exposure can
+only respond through existing P_xe coupling.
+
+### 14.3 Independent oracle and tests
+
+`tests/prob_livo/oracle/super_eskf_oracle.h` is a minimal test-only translation
+of the canonical Super ESKF equations in a separate namespace. It is derived
+from reference commit `9fc949f46291c0fa76e5b7cdb372c940eb4b3f6e` and the exact
+source paths/line ranges above; it is not linked to production and does not
+call any `ProbESKF19` helper. The test runner is split into layout, retraction,
+predict, update, and exposure translation units.
+
+### 14.4 I1 gate ledger
+
+| Gate | Invariant / authority / observable / tolerance | Negative or adversarial fixture and failure class | Result |
+|---|---|---|---|
+| G-I1.0 | I0 frontier `9ed486c`; pre-I1 host build with the existing VIKIT overlay; RC 0 | no source mutation at baseline; build/configuration failure | PASS |
+| G-I1.1 | centralized x19↔18D vector/covariance, dense SPD off-diagonals, F embeddings; exact roundtrip | contiguous `[0:18]` extraction, velocity/bias off-diagonal mutation, exposure overwrite/drop; index/embedding loss | PASS |
+| G-I1.2 | `ApplySuperLioIncrement19` vs independent oracle, small and dense increments; state/gravity error ≤2e-12 | FAST `operator+=` gravity path; missing normalization/retraction semantics | PASS |
+| G-I1.3 | zero/finite gyro, nonidentity R, biases, 0.01–0.07 s multi-step midpoint nominal parity; state error ≤2e-11 | wrong rotation/acceleration order or timestamp; nominal divergence | PASS |
+| G-I1.4 | full dense physical P parity using Super right Jacobian/F/Q; covariance error ≤2e-10 | omit right Jacobian, wrong FAST F, move accelerometer noise, square covariance entries | PASS |
+| G-I1.5 | P_xe=0 isolation and nonzero P_xe full-matrix propagation; cross error ≤3e-10 | zero valid cross covariance; exposure process transition leakage | PASS |
+| G-I1.6 | 2-iteration, 4-iteration, max-iteration, callback sequence, prior and final reset, dense information; state ≤3e-11/cov ≤3e-10 | omit final reset, converge on first pass, direct exposure/contiguous H mutation; reset/iteration/index error | PASS |
+| G-I1.7 | LiDAR callback is 6x6 pose-only at host 0–5; zero-cross exposure unchanged, nonzero-cross indirect response | host `[0:7]` direct exposure row; forbidden measurement coupling | PASS |
+| G-I1.8 | finite symmetric posterior and near-PSD eigenvalue; symmetry ≤1e-12, min eigenvalue >−1e-8 | explicit nonfinite/asymmetric/negative-eigenvalue/singular classifications | PASS |
+| G-I1.9 | `git diff 9ed486c..HEAD` for `include/common_lib.h` and `src/vio.cpp` is empty; static ABI assertions | no visual source/operator change; ABI/layout regression | PASS |
+| G-I1.10 | `catkin_make --pkg fast_livo` builds `fastlivo_mapping`, existing libraries, and isolated test target; no LIVMapper callsite or bag run | static runtime grep and executable link check; runtime integration/scope leak | PASS |
+| G-I1.11 | public API takes `StatesGroup&`, exposes future scheduler timing/update seam, no persistent duplicate state/cov | source contract audit for copied filter state or second P; ownership violation | PASS |
+
+All numerical evidence is deterministic and printed by
+`prob_livo_i1_tests`; no `vector<bool>`, tautological production-vs-production
+comparison, or bag execution is used.
+
+## 15. I1 numerical and scope summary
+
+The strongest observed errors are:
+
+```text
+retraction state/gravity:                 0 to machine precision
+predict physical nominal/covariance:      0 in the oracle comparison
+update rotation/position/velocity/bias/g: <= 2.93e-15
+update physical covariance:               6.26e-13 (2 iterations)
+nonzero-cross full P19 predict:           1.14e-13
+posterior covariance symmetry:            9.06e-14
+```
+
+The negative fixtures are intentionally nonzero (for example, missing
+right-Jacobian error `12.73`, direct exposure-row error `7.10`, and omitted
+final-reset error `2.20e-3`), demonstrating that the tests discriminate the
+required semantics. I1 makes no scheduler integration, VIO behavior change,
+OctVox/P1–P4 import, P5 use, bag run, or dataset accuracy claim.
+
+The current state after successful completion is:
+
+```text
+I0 = CLOSED / OWNER VERIFIED
+I1 = CLOSED/PASS — Owner audit pending
+I2–I8 = NOT STARTED
+
+FAST-LIVO2 StatesGroup ABI = preserved
+ProbESKF19 LIO semantics   = canonical Super ESKF
+shared state               = one x19/P19 design
+runtime integration        = NOT STARTED
+
+Next stage = I2 Super IMU + undistortion under FAST-LIVO2 scheduler
+```
+
+Do not begin I2 from this stage.
