@@ -6,6 +6,7 @@
 #include <string>
 
 #include <image_transport/image_transport.h>
+#include <tbb/global_control.h>
 
 namespace {
 
@@ -34,6 +35,12 @@ int main(int argc, char **argv) {
   const std::string bag_path = argv[1];
   const std::string output_directory = argv[2];
   const std::string input_semantics = argc == 4 ? argv[3] : "fast_native";
+  // Match the old prob_lio offline production tool: TBB owns the hot-loop
+  // parallelism and is explicitly allowed to use all 32 host threads. This
+  // does not alter callback order or the scheduler's stateful boundaries.
+  constexpr int kOfflineTbbParallelism = 32;
+  tbb::global_control tbb_control(
+      tbb::global_control::max_allowed_parallelism, kOfflineTbbParallelism);
   std::error_code error;
   std::filesystem::create_directories(output_directory, error);
   if (error) {
@@ -93,6 +100,7 @@ int main(int argc, char **argv) {
             << process_invocations << " successful_steps=" << successful_steps
             << " lidar_read=" << accounting.lidar_read
             << " imu_read=" << accounting.imu_read
+            << " tbb_max_parallelism=" << kOfflineTbbParallelism
             << " speed_factor=" << accounting.speed_factor << "x\n";
   ros::shutdown();
   return 0;

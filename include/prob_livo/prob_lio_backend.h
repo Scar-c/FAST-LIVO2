@@ -118,6 +118,17 @@ class ProbLioBackend {
   void AppendTrajectory(double timestamp);
   void SetError(const std::string &message) { last_error_ = message; }
 
+  struct ObservationContribution {
+    Matrix6 hth = Matrix6::Zero();
+    Vector6 htr = Vector6::Zero();
+    std::size_t hknn_returns = 0;
+    bool hknn_queried = false;
+    bool qr_attempted = false;
+    bool qr_valid = false;
+    bool weighted = false;
+    bool legacy = false;
+  };
+
   StatesGroup &state_;
   Options options_;
   ProbESKF19 filter_;

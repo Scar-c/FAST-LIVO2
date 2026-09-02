@@ -2,6 +2,9 @@
 
 #include <Eigen/Geometry>
 
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -306,107 +309,115 @@ bool ProbImuAdapter::Undistort(const LidarMeasureGroup &measures,
   output.height = 1;
   output.is_dense = false;
 
-  for (std::size_t index = 0; index < measures.pcl_proc_cur->points.size();
-       ++index) {
-    const PointType &input = measures.pcl_proc_cur->points[index];
-    PointType &undistorted = output.points[index];
-    undistorted = input;
+  for (const PointType &input : measures.pcl_proc_cur->points) {
     const double query_time = timing.point_time_origin +
                               static_cast<double>(input.curvature) / 1000.0;
     if (!std::isfinite(query_time)) {
       message = "point query time is outside the propagated trace";
       return false;
     }
-
-    // Super's Propagation_Undistort intentionally leaves points whose source
-    // acquisition time is after the scan endpoint in the LiDAR->IMU frame.
-    // This is required for the legacy Ouster source-order/end-time contract:
-    // the last accepted sampled point is the endpoint, not the maximum t.
-    if (query_time > trace.back().timestamp) {
-      const Eigen::Vector3d raw(input.x, input.y, input.z);
-      const Eigen::Vector3d lidar_in_imu =
-          options_.lidar_to_imu_rotation * raw +
-          options_.lidar_to_imu_translation;
-      undistorted.x = static_cast<float>(lidar_in_imu.x());
-      undistorted.y = static_cast<float>(lidar_in_imu.y());
-      undistorted.z = static_cast<float>(lidar_in_imu.z());
-      continue;
-    }
-
-    PropagationSnapshot interpolated;
     if (query_time <= trace.front().timestamp + tolerance) {
-      // Super's matching loop defaults to the first propagation interval when
-      // a source-ordered point predates the trace front. This is a small
-      // backward extrapolation caused by overlapping scan windows, and must
-      // not reject the whole scan.
       if (trace.size() < 2) {
         message = "propagated trace has no interval for an early point";
         return false;
       }
-      const PropagationSnapshot &head = trace.front();
-      const PropagationSnapshot &tail = trace[1];
-      const double dt = tail.timestamp - head.timestamp;
-      if (!(dt > tolerance)) {
+      if (!(trace[1].timestamp - trace.front().timestamp > tolerance)) {
         message = "propagated trace has an invalid first interval";
         return false;
       }
-      const double tau = query_time - head.timestamp;
-      const double ratio = tau / dt;
-      interpolated.timestamp = query_time;
-      const Eigen::Vector3d relative_log =
-          LogSO3(head.rotation.transpose() * tail.rotation);
-      interpolated.rotation = head.rotation * ExpSO3(relative_log * ratio);
-      interpolated.position =
-          head.position + head.velocity * tau + 0.5 * tail.acceleration * tau * tau;
-      interpolated.velocity = head.velocity;
-      interpolated.acceleration = tail.acceleration;
-      interpolated.angular_velocity = tail.angular_velocity;
-    } else if (query_time >= trace.back().timestamp - tolerance) {
-      interpolated = trace.back();
-    } else {
-      std::size_t upper = 1;
-      while (upper < trace.size() &&
-             trace[upper].timestamp < query_time) {
-        ++upper;
-      }
-      if (upper >= trace.size()) {
-        interpolated = trace.back();
-      } else {
-        const PropagationSnapshot &head = trace[upper - 1];
-        const PropagationSnapshot &tail = trace[upper];
-        const double dt = tail.timestamp - head.timestamp;
-        if (!(dt > tolerance)) {
-          interpolated = tail;
-        } else {
-          const double tau = query_time - head.timestamp;
-          const double ratio = tau / dt;
-          interpolated.timestamp = query_time;
-          interpolated.rotation =
-              Eigen::Quaterniond(head.rotation)
-                  .slerp(ratio, Eigen::Quaterniond(tail.rotation))
-                  .toRotationMatrix();
-          interpolated.position =
-              head.position + head.velocity * tau +
-              0.5 * tail.acceleration * tau * tau;
-          interpolated.velocity = head.velocity;
-          interpolated.acceleration = tail.acceleration;
-          interpolated.angular_velocity = tail.angular_velocity;
-        }
-      }
     }
-
-    const Eigen::Vector3d raw(input.x, input.y, input.z);
-    const Eigen::Vector3d lidar_in_imu =
-        options_.lidar_to_imu_rotation * raw +
-        options_.lidar_to_imu_translation;
-    const Eigen::Vector3d end_frame_point =
-        end_rotation_inverse *
-        (interpolated.rotation * lidar_in_imu +
-         interpolated.position - end_position);
-    undistorted.x = static_cast<float>(end_frame_point.x());
-    undistorted.y = static_cast<float>(end_frame_point.y());
-    undistorted.z = static_cast<float>(end_frame_point.z());
   }
+
+  tbb::parallel_for(
+      tbb::blocked_range<std::size_t>(0,
+                                      measures.pcl_proc_cur->points.size()),
+      [&](const tbb::blocked_range<std::size_t> &range) {
+        for (std::size_t index = range.begin(); index < range.end(); ++index) {
+          const PointType &input = measures.pcl_proc_cur->points[index];
+          PointType &undistorted = output.points[index];
+          undistorted = input;
+          const double query_time = timing.point_time_origin +
+                                    static_cast<double>(input.curvature) /
+                                        1000.0;
+
+          // Super's Propagation_Undistort intentionally leaves points whose
+          // source acquisition time is after the scan endpoint in the
+          // LiDAR->IMU frame. This is required for the legacy Ouster
+          // source-order/end-time contract.
+          if (query_time > trace.back().timestamp) {
+            const Eigen::Vector3d raw(input.x, input.y, input.z);
+            const Eigen::Vector3d lidar_in_imu =
+                options_.lidar_to_imu_rotation * raw +
+                options_.lidar_to_imu_translation;
+            undistorted.x = static_cast<float>(lidar_in_imu.x());
+            undistorted.y = static_cast<float>(lidar_in_imu.y());
+            undistorted.z = static_cast<float>(lidar_in_imu.z());
+            continue;
+          }
+
+          PropagationSnapshot interpolated;
+          if (query_time <= trace.front().timestamp + tolerance) {
+            const PropagationSnapshot &head = trace.front();
+            const PropagationSnapshot &tail = trace[1];
+            const double dt = tail.timestamp - head.timestamp;
+            const double tau = query_time - head.timestamp;
+            const double ratio = tau / dt;
+            interpolated.timestamp = query_time;
+            const Eigen::Vector3d relative_log =
+                LogSO3(head.rotation.transpose() * tail.rotation);
+            interpolated.rotation = head.rotation * ExpSO3(relative_log * ratio);
+            interpolated.position = head.position + head.velocity * tau +
+                                    0.5 * tail.acceleration * tau * tau;
+            interpolated.velocity = head.velocity;
+            interpolated.acceleration = tail.acceleration;
+            interpolated.angular_velocity = tail.angular_velocity;
+          } else if (query_time >= trace.back().timestamp - tolerance) {
+            interpolated = trace.back();
+          } else {
+            std::size_t upper = 1;
+            while (upper < trace.size() &&
+                   trace[upper].timestamp < query_time) {
+              ++upper;
+            }
+            if (upper >= trace.size()) {
+              interpolated = trace.back();
+            } else {
+              const PropagationSnapshot &head = trace[upper - 1];
+              const PropagationSnapshot &tail = trace[upper];
+              const double dt = tail.timestamp - head.timestamp;
+              if (!(dt > tolerance)) {
+                interpolated = tail;
+              } else {
+                const double tau = query_time - head.timestamp;
+                const double ratio = tau / dt;
+                interpolated.timestamp = query_time;
+                interpolated.rotation =
+                    Eigen::Quaterniond(head.rotation)
+                        .slerp(ratio, Eigen::Quaterniond(tail.rotation))
+                        .toRotationMatrix();
+                interpolated.position =
+                    head.position + head.velocity * tau +
+                    0.5 * tail.acceleration * tau * tau;
+                interpolated.velocity = head.velocity;
+                interpolated.acceleration = tail.acceleration;
+                interpolated.angular_velocity = tail.angular_velocity;
+              }
+            }
+          }
+
+          const Eigen::Vector3d raw(input.x, input.y, input.z);
+          const Eigen::Vector3d lidar_in_imu =
+              options_.lidar_to_imu_rotation * raw +
+              options_.lidar_to_imu_translation;
+          const Eigen::Vector3d end_frame_point =
+              end_rotation_inverse *
+              (interpolated.rotation * lidar_in_imu + interpolated.position -
+               end_position);
+          undistorted.x = static_cast<float>(end_frame_point.x());
+          undistorted.y = static_cast<float>(end_frame_point.y());
+          undistorted.z = static_cast<float>(end_frame_point.z());
+        }
+      });
   return true;
 }
 

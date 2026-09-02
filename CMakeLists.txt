@@ -46,13 +46,13 @@ message(STATUS "Processor count: ${N}")
 
 # Set the number of cores for multithreading
 if(N GREATER 4)
-  math(EXPR PROC_NUM "4")
+  math(EXPR PROC_NUM "${N}")
   add_definitions(-DMP_EN -DMP_PROC_NUM=${PROC_NUM})
-  message(STATUS "Multithreading enabled. Cores: ${PROC_NUM}")
+  message(STATUS "OpenMP multithreading enabled. Cores: ${PROC_NUM}")
 elseif(N GREATER 1)
   math(EXPR PROC_NUM "${N}")
   add_definitions(-DMP_EN -DMP_PROC_NUM=${PROC_NUM})
-  message(STATUS "Multithreading enabled. Cores: ${PROC_NUM}")
+  message(STATUS "OpenMP multithreading enabled. Cores: ${PROC_NUM}")
 else()
   add_definitions(-DMP_PROC_NUM=1)
   message(STATUS "Single core detected. Multithreading disabled.")
@@ -99,6 +99,8 @@ find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Sophus REQUIRED)
 find_package(Boost REQUIRED COMPONENTS thread)
+find_library(TBB_LIBRARY NAMES tbb REQUIRED)
+message(STATUS "TBB library: ${TBB_LIBRARY}")
 
 set(Sophus_LIBRARIES libSophus.so)
 
@@ -128,6 +130,7 @@ add_library(prob_livo_eskf
   src/prob_livo/prob_eskf19.cpp
   src/prob_livo/prob_imu_adapter.cpp
 )
+target_link_libraries(prob_livo_eskf ${TBB_LIBRARY})
 add_library(prob_livo_backend src/prob_livo/prob_lio_backend.cpp)
 target_include_directories(prob_livo_backend PRIVATE
   include/prob_livo/super_native
@@ -139,6 +142,7 @@ target_link_libraries(prob_livo_backend
   ${OpenCV_LIBRARIES}
   ${Sophus_LIBRARIES}
   ${Boost_LIBRARIES}
+  ${TBB_LIBRARY}
   ${OpenMP_CXX_FLAGS}
 )
 target_link_libraries(laser_mapping prob_livo_backend)
@@ -160,6 +164,7 @@ target_link_libraries(prob_livo_offline
   ${OpenCV_LIBRARIES}
   ${Sophus_LIBRARIES}
   ${Boost_LIBRARIES}
+  ${TBB_LIBRARY}
 )
 
 # I1/I2 estimator code is deliberately non-wired.  The executable keeps the

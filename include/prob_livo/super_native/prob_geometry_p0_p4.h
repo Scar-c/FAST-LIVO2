@@ -9,6 +9,9 @@
 #include <Eigen/Core>
 #include <Eigen/Eigenvalues>
 
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
+
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -122,11 +125,15 @@ inline void ComputeMapCovList(
     std::vector<BASIC::M3d> &world_covariances,
     MapPoseCovModel model = MapPoseCovModel::Livo2Compat) {
   world_covariances.resize(points_imu.size());
-  for (std::size_t i = 0; i < points_imu.size(); ++i) {
-    world_covariances[i] = ComputeMapPointCov(
-        points_imu[i].cast<double>(), sensor_covariances[i], world_rotation,
-        rotation_covariance, position_covariance, model);
-  }
+  tbb::parallel_for(
+      tbb::blocked_range<std::size_t>(0, points_imu.size()),
+      [&](const tbb::blocked_range<std::size_t> &range) {
+        for (std::size_t i = range.begin(); i < range.end(); ++i) {
+          world_covariances[i] = ComputeMapPointCov(
+              points_imu[i].cast<double>(), sensor_covariances[i],
+              world_rotation, rotation_covariance, position_covariance, model);
+        }
+      });
 }
 
 inline void ComputeInitMapCovList(
@@ -138,17 +145,22 @@ inline void ComputeInitMapCovList(
     std::vector<BASIC::M3d> &world_covariances,
     MapPoseCovModel model = MapPoseCovModel::Livo2Compat) {
   world_covariances.resize(points_lidar.size());
-  for (std::size_t i = 0; i < points_lidar.size(); ++i) {
-    BASIC::M3d lidar_covariance;
-    CalcLidarPointCov(points_lidar[i].cast<double>(), depth_error,
-                      beam_error_deg, lidar_covariance);
-    const BASIC::V3d point_imu =
-        lidar_to_imu_rotation * points_lidar[i].cast<double>() +
-        lidar_to_imu_translation;
-    world_covariances[i] = ComputeMapPointCov(
-        point_imu, RotateCovariance(lidar_to_imu_rotation, lidar_covariance),
-        world_rotation, rotation_covariance, position_covariance, model);
-  }
+  tbb::parallel_for(
+      tbb::blocked_range<std::size_t>(0, points_lidar.size()),
+      [&](const tbb::blocked_range<std::size_t> &range) {
+        for (std::size_t i = range.begin(); i < range.end(); ++i) {
+          BASIC::M3d lidar_covariance;
+          CalcLidarPointCov(points_lidar[i].cast<double>(), depth_error,
+                            beam_error_deg, lidar_covariance);
+          const BASIC::V3d point_imu =
+              lidar_to_imu_rotation * points_lidar[i].cast<double>() +
+              lidar_to_imu_translation;
+          world_covariances[i] = ComputeMapPointCov(
+              point_imu,
+              RotateCovariance(lidar_to_imu_rotation, lidar_covariance),
+              world_rotation, rotation_covariance, position_covariance, model);
+        }
+      });
 }
 
 inline void ComputeBodyCovListWithExtrinsic(
@@ -156,16 +168,20 @@ inline void ComputeBodyCovListWithExtrinsic(
     const BASIC::V3d &lidar_to_imu_translation, double depth_error,
     double beam_error_deg, std::vector<BASIC::M3d> &covariances_imu) {
   covariances_imu.resize(points_imu.size());
-  for (std::size_t i = 0; i < points_imu.size(); ++i) {
-    const BASIC::V3d point_lidar =
-        lidar_to_imu_rotation.transpose() *
-        (points_imu[i].cast<double>() - lidar_to_imu_translation);
-    BASIC::M3d lidar_covariance;
-    CalcLidarPointCov(point_lidar, depth_error, beam_error_deg,
-                      lidar_covariance);
-    covariances_imu[i] = RotateCovariance(lidar_to_imu_rotation,
-                                           lidar_covariance);
-  }
+  tbb::parallel_for(
+      tbb::blocked_range<std::size_t>(0, points_imu.size()),
+      [&](const tbb::blocked_range<std::size_t> &range) {
+        for (std::size_t i = range.begin(); i < range.end(); ++i) {
+          const BASIC::V3d point_lidar =
+              lidar_to_imu_rotation.transpose() *
+              (points_imu[i].cast<double>() - lidar_to_imu_translation);
+          BASIC::M3d lidar_covariance;
+          CalcLidarPointCov(point_lidar, depth_error, beam_error_deg,
+                            lidar_covariance);
+          covariances_imu[i] = RotateCovariance(lidar_to_imu_rotation,
+                                                 lidar_covariance);
+        }
+      });
 }
 
 enum class P2pWeightMode { Fixed1000 = 0, ProbLivo2 = 1 };

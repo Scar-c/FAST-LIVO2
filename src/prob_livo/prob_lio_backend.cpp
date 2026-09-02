@@ -2,6 +2,9 @@
 
 #include <Eigen/Geometry>
 
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
+
 #include <cmath>
 #include <filesystem>
 #include <iomanip>
@@ -257,15 +260,20 @@ bool ProbLioBackend::InsertInitialMap(const PointCloudXYZI &raw_scan) {
   points_lidar.resize(point_count);
   LI2Sup::VV3 points_world;
   points_world.resize(point_count);
-  for (std::size_t index = 0; index < point_count; ++index) {
-    const PointType &point = raw_scan.points[index];
-    points_lidar[index] = LI2Sup::V3(point.x, point.y, point.z);
-    const Eigen::Vector3d point_imu =
-        options_.lidar_to_imu_rotation * points_lidar[index].cast<double>() +
-        options_.lidar_to_imu_translation;
-    points_world[index] =
-        (state_.rot_end * point_imu + state_.pos_end).cast<float>();
-  }
+  tbb::parallel_for(
+      tbb::blocked_range<std::size_t>(0, point_count),
+      [&](const tbb::blocked_range<std::size_t> &range) {
+        for (std::size_t index = range.begin(); index < range.end(); ++index) {
+          const PointType &point = raw_scan.points[index];
+          points_lidar[index] = LI2Sup::V3(point.x, point.y, point.z);
+          const Eigen::Vector3d point_imu =
+              options_.lidar_to_imu_rotation *
+                  points_lidar[index].cast<double>() +
+              options_.lidar_to_imu_translation;
+          points_world[index] =
+              (state_.rot_end * point_imu + state_.pos_end).cast<float>();
+        }
+      });
 
   if (options_.covariance_pipeline_enabled) {
     LI2Sup::ComputeInitMapCovList(
@@ -301,10 +309,14 @@ bool ProbLioBackend::BuildAndSolveScan() {
   counters_.downsampled_points += downsampled_scan_->size();
 
   points_body_.resize(downsampled_scan_->size());
-  for (std::size_t index = 0; index < downsampled_scan_->size(); ++index) {
-    const PointType &point = downsampled_scan_->points[index];
-    points_body_[index] = LI2Sup::V3(point.x, point.y, point.z);
-  }
+  tbb::parallel_for(
+      tbb::blocked_range<std::size_t>(0, downsampled_scan_->size()),
+      [&](const tbb::blocked_range<std::size_t> &range) {
+        for (std::size_t index = range.begin(); index < range.end(); ++index) {
+          const PointType &point = downsampled_scan_->points[index];
+          points_body_[index] = LI2Sup::V3(point.x, point.y, point.z);
+        }
+      });
   if (options_.covariance_pipeline_enabled) {
     LI2Sup::ComputeBodyCovListWithExtrinsic(
         points_body_, options_.lidar_to_imu_rotation,
@@ -329,85 +341,123 @@ bool ProbLioBackend::BuildAndSolveScan() {
   const bool update_ok = filter_.UpdateObserve(
       [this](const StatesGroup &state, bool need_converge,
              Matrix6 &hth, Vector6 &htr) {
-        for (std::size_t index = 0; index < points_body_.size(); ++index) {
-          const LI2Sup::V3 point_world_float =
-              (state.rot_end * points_body_[index].cast<double>() +
-               state.pos_end)
-                  .cast<float>();
-          const LI2Sup::V3d point_world = point_world_float.cast<double>();
+        std::vector<ObservationContribution, Eigen::aligned_allocator<
+            ObservationContribution>> contributions(points_body_.size());
 
-          if (!need_converge) {
-            LI2Sup::OctVoxMap<LI2Sup::V3, LI2Sup::scalar>::KNNHeapType top_k;
-            map_->getTopK(point_world_float, top_k);
-            ++counters_.hknn_queries;
-            counters_.hknn_returns += top_k.count;
-            if (top_k.count < 4) {
-              effect_mask_[index] = false;
-              continue;
-            }
+        // Association and QR are read-only with respect to the map. Each
+        // point owns one contribution slot; only the ordered reduction below
+        // touches the ESKF accumulator and scalar counters.
+        tbb::parallel_for(
+            tbb::blocked_range<std::size_t>(0, points_body_.size()),
+            [&](const tbb::blocked_range<std::size_t> &range) {
+              for (std::size_t index = range.begin(); index < range.end();
+                   ++index) {
+                ObservationContribution &contribution = contributions[index];
+                const LI2Sup::V3 point_world_float =
+                    (state.rot_end * points_body_[index].cast<double>() +
+                     state.pos_end)
+                        .cast<float>();
+                const LI2Sup::V3d point_world =
+                    point_world_float.cast<double>();
 
-            LI2Sup::PlanePointsArray plane_points;
-            LI2Sup::PlaneCovsArray plane_covariances;
-            for (int neighbor = 0; neighbor < top_k.count; ++neighbor) {
-              plane_points[neighbor] = top_k.points_[neighbor].cast<double>();
-              plane_covariances[neighbor] = top_k.covs_[neighbor];
-            }
-            const LI2Sup::PlaneFitQr fit =
-                LI2Sup::SolvePlaneFitQr(plane_points, top_k.count);
-            effect_mask_[index] = fit.solved && fit.legacy_accepted;
-            if (!effect_mask_[index]) continue;
-            const double scale = fit.q.norm();
-            plane_coefficients_[index] << fit.q / scale, 1.0 / scale;
+                if (!need_converge) {
+                  LI2Sup::OctVoxMap<LI2Sup::V3,
+                                    LI2Sup::scalar>::KNNHeapType top_k;
+                  map_->getTopK(point_world_float, top_k);
+                  contribution.hknn_queried = true;
+                  contribution.hknn_returns = top_k.count;
+                  if (top_k.count < 4) {
+                    effect_mask_[index] = false;
+                    continue;
+                  }
 
-            if (options_.qr_plane_covariance_enabled ||
-                options_.p2p_weight_mode == LI2Sup::P2pWeightMode::ProbLivo2) {
-              ++counters_.qr_attempted;
-              plane_covariances_[index] = LI2Sup::ComputeProbQrPlane(
-                  plane_points, plane_covariances, top_k.count);
-              if (plane_covariances_[index].status ==
-                  LI2Sup::ProbQrPlane::kValid) {
-                ++counters_.qr_valid;
+                  LI2Sup::PlanePointsArray plane_points;
+                  LI2Sup::PlaneCovsArray plane_covariances;
+                  for (int neighbor = 0; neighbor < top_k.count; ++neighbor) {
+                    plane_points[neighbor] =
+                        top_k.points_[neighbor].cast<double>();
+                    plane_covariances[neighbor] = top_k.covs_[neighbor];
+                  }
+                  const LI2Sup::PlaneFitQr fit =
+                      LI2Sup::SolvePlaneFitQr(plane_points, top_k.count);
+                  effect_mask_[index] = fit.solved && fit.legacy_accepted;
+                  if (!effect_mask_[index]) continue;
+                  const double scale = fit.q.norm();
+                  plane_coefficients_[index] << fit.q / scale, 1.0 / scale;
+
+                  if (options_.qr_plane_covariance_enabled ||
+                      options_.p2p_weight_mode ==
+                          LI2Sup::P2pWeightMode::ProbLivo2) {
+                    contribution.qr_attempted = true;
+                    plane_covariances_[index] = LI2Sup::ComputeProbQrPlane(
+                        plane_points, plane_covariances, top_k.count);
+                    contribution.qr_valid =
+                        plane_covariances_[index].status ==
+                        LI2Sup::ProbQrPlane::kValid;
+                  }
+                }
+
+                if (!effect_mask_[index]) continue;
+                const Eigen::Vector4d &plane = plane_coefficients_[index];
+                const double residual =
+                    plane.head<3>().dot(point_world) + plane[3];
+                const double length = points_body_[index].cast<double>().norm();
+                if (!(length > 81.0 * residual * residual)) {
+                  effect_mask_[index] = false;
+                  continue;
+                }
+
+                const Eigen::Vector3d normal = plane.head<3>();
+                const Eigen::Vector3d normal_body =
+                    state.rot_end.transpose() * normal;
+                const Eigen::Vector3d point_body =
+                    points_body_[index].cast<double>();
+                Vector6 jacobian;
+                jacobian.head<3>() = point_body.cross(normal_body);
+                jacobian.tail<3>() = normal;
+
+                double weight = 1000.0;
+                if (options_.p2p_weight_mode ==
+                    LI2Sup::P2pWeightMode::ProbLivo2) {
+                  const LI2Sup::ProbQrPlane &qr = plane_covariances_[index];
+                  if (qr.status != LI2Sup::ProbQrPlane::kValid) continue;
+                  const double plane_variance =
+                      LI2Sup::PlaneResidualVariance(point_world, qr.covariance);
+                  const double point_variance =
+                      options_.covariance_pipeline_enabled
+                          ? LI2Sup::PointResidualVariance(
+                                normal, state.rot_end,
+                                body_covariances_[index])
+                          : 0.0;
+                  const LI2Sup::ProbWeight probability_weight =
+                      LI2Sup::ComputeP2pProbWeight(plane_variance,
+                                                   point_variance);
+                  if (!probability_weight.valid) continue;
+                  weight = probability_weight.weight;
+                  contribution.weighted = true;
+                } else {
+                  contribution.legacy = true;
+                }
+                contribution.hth =
+                    jacobian * weight * jacobian.transpose();
+                contribution.htr = -jacobian * weight * residual;
               }
-            }
-          }
+            });
 
-          if (!effect_mask_[index]) continue;
-          const Eigen::Vector4d &plane = plane_coefficients_[index];
-          const double residual = plane.head<3>().dot(point_world) + plane[3];
-          const double length = points_body_[index].cast<double>().norm();
-          if (!(length > 81.0 * residual * residual)) {
-            effect_mask_[index] = false;
-            continue;
+        // Keep the original point-index order for floating-point accumulation,
+        // so parallel scheduling changes throughput but not the reduction
+        // contract used by the online and offline paths.
+        for (const ObservationContribution &contribution : contributions) {
+          hth += contribution.hth;
+          htr += contribution.htr;
+          if (contribution.hknn_queried) {
+            ++counters_.hknn_queries;
+            counters_.hknn_returns += contribution.hknn_returns;
           }
-
-          const Eigen::Vector3d normal = plane.head<3>();
-          const Eigen::Vector3d normal_body = state.rot_end.transpose() * normal;
-          const Eigen::Vector3d point_body = points_body_[index].cast<double>();
-          Vector6 jacobian;
-          jacobian.head<3>() = point_body.cross(normal_body);
-          jacobian.tail<3>() = normal;
-
-          double weight = 1000.0;
-          if (options_.p2p_weight_mode == LI2Sup::P2pWeightMode::ProbLivo2) {
-            const LI2Sup::ProbQrPlane &qr = plane_covariances_[index];
-            if (qr.status != LI2Sup::ProbQrPlane::kValid) continue;
-            const double plane_variance =
-                LI2Sup::PlaneResidualVariance(point_world, qr.covariance);
-            const double point_variance = options_.covariance_pipeline_enabled
-                                              ? LI2Sup::PointResidualVariance(
-                                                    normal, state.rot_end,
-                                                    body_covariances_[index])
-                                              : 0.0;
-            const LI2Sup::ProbWeight probability_weight =
-                LI2Sup::ComputeP2pProbWeight(plane_variance, point_variance);
-            if (!probability_weight.valid) continue;
-            weight = probability_weight.weight;
-            ++counters_.weighted_measurements;
-          } else {
-            ++counters_.legacy_measurements;
-          }
-          hth += jacobian * weight * jacobian.transpose();
-          htr -= jacobian * weight * residual;
+          if (contribution.qr_attempted) ++counters_.qr_attempted;
+          if (contribution.qr_valid) ++counters_.qr_valid;
+          if (contribution.weighted) ++counters_.weighted_measurements;
+          if (contribution.legacy) ++counters_.legacy_measurements;
         }
       });
   if (!update_ok) {
@@ -422,11 +472,16 @@ void ProbLioBackend::UpdateMap() {
   if (point_count == 0) return;
   LI2Sup::VV3 points_world;
   points_world.resize(point_count);
-  for (std::size_t index = 0; index < point_count; ++index) {
-    points_world[index] =
-        (state_.rot_end * points_body_[index].cast<double>() + state_.pos_end)
-            .cast<float>();
-  }
+  tbb::parallel_for(
+      tbb::blocked_range<std::size_t>(0, point_count),
+      [&](const tbb::blocked_range<std::size_t> &range) {
+        for (std::size_t index = range.begin(); index < range.end(); ++index) {
+          points_world[index] =
+              (state_.rot_end * points_body_[index].cast<double>() +
+               state_.pos_end)
+                  .cast<float>();
+        }
+      });
   if (options_.covariance_pipeline_enabled) {
     LI2Sup::ComputeMapCovList(
         points_body_, body_covariances_, state_.rot_end,
@@ -451,17 +506,22 @@ void ProbLioBackend::UpdateMap() {
 void ProbLioBackend::BuildWorldScan() {
   world_scan_->clear();
   if (undistorted_scan_ == nullptr) return;
-  world_scan_->reserve(undistorted_scan_->size());
-  for (const PointType &input : undistorted_scan_->points) {
-    PointType output = input;
-    const Eigen::Vector3d world =
-        state_.rot_end * Eigen::Vector3d(input.x, input.y, input.z) +
-        state_.pos_end;
-    output.x = static_cast<float>(world.x());
-    output.y = static_cast<float>(world.y());
-    output.z = static_cast<float>(world.z());
-    world_scan_->push_back(output);
-  }
+  world_scan_->resize(undistorted_scan_->size());
+  tbb::parallel_for(
+      tbb::blocked_range<std::size_t>(0, undistorted_scan_->size()),
+      [&](const tbb::blocked_range<std::size_t> &range) {
+        for (std::size_t index = range.begin(); index < range.end(); ++index) {
+          const PointType &input = undistorted_scan_->points[index];
+          PointType output = input;
+          const Eigen::Vector3d world =
+              state_.rot_end * Eigen::Vector3d(input.x, input.y, input.z) +
+              state_.pos_end;
+          output.x = static_cast<float>(world.x());
+          output.y = static_cast<float>(world.y());
+          output.z = static_cast<float>(world.z());
+          world_scan_->points[index] = output;
+        }
+      });
   world_scan_->header = undistorted_scan_->header;
   world_scan_->is_dense = undistorted_scan_->is_dense;
 }
