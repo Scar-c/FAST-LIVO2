@@ -1,0 +1,43 @@
+# Prompt 4 canonical overlay. Load after config/NTU_VIRAL.yaml.
+# Values are copied from the frozen Super-LIO NTU.yaml and the P0-P4
+# integration contract; this file is not a tuning surface.
+common:
+  prob_livo_input_semantics: "super_ntu_legacy"
+
+time_offset:
+  lidar_time_offset: 0.0
+
+preprocess:
+  lidar_type: 3 # Ouster
+  point_filter_num: 3
+  blind: 2.0
+
+prob_livo:
+  super_blind: 2.0
+  super_maxrange: 150.0
+  super_filter_rate: 3
+  backend_profile: "p0_p4"
+  camera_vio: false
+  p5_enabled: false
+  map_pose_cov_model: "livo2_compat"
+  cov_storage_precision: "double"
+  covariance_pipeline_enabled: true
+  qr_plane_covariance_enabled: true
+  p2p_weight_mode: "prob_livo2"
+  association_mode: "super_legacy"
+  gravity_norm: 9.7946
+  imu_gyro_variance: 0.1
+  imu_accelerometer_variance: 0.1
+  imu_gyro_bias_variance: 0.0001
+  imu_accelerometer_bias_variance: 0.0001
+  max_iterations: 4
+  quit_eps: 0.001
+  voxel_size: 0.5
+  map_resolution: 0.5
+  lidar_depth_error: 0.02
+  lidar_beam_error_deg: 0.01
+  qr_covariance_validation: "light"
+
+extrin_calib:
+  extrinsic_T: [-0.050, 0.000, 0.055]
+  extrinsic_R: [1, 0, 0, 0, 1, 0, 0, 0, 1]

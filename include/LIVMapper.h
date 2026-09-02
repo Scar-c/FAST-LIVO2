@@ -16,6 +16,7 @@ which is included as part of this source code package.
 #include "IMU_Processing.h"
 #include "vio.h"
 #include "preprocess.h"
+#include "prob_livo/input_semantics.h"
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 #include <nav_msgs/Path.h>
@@ -167,6 +168,11 @@ public:
   // Prompt-3 camera-OFF backend switch.  The backend owns the ProbESKF19,
   // lifecycle and Super-native map; LIVMapper remains the ROS shell.
   bool prob_livo_backend_enabled_ = false;
+  prob_livo::InputSemantics prob_livo_input_semantics_ =
+      prob_livo::InputSemantics::kFastNative;
+  double prob_livo_super_blind_ = 2.0;
+  double prob_livo_super_maxrange_ = 150.0;
+  int prob_livo_super_filter_rate_ = 3;
   std::string prob_livo_trajectory_path_;
   std::unique_ptr<prob_livo::ProbLioBackend> prob_livo_backend_;
 

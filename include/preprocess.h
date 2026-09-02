@@ -157,6 +157,12 @@ public:
 
   void process(const livox_ros_driver::CustomMsg::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out);
   void process(const sensor_msgs::PointCloud2::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out);
+  // Frozen Super-LIO NTU Ouster compatibility path. This deliberately keeps
+  // source-index order and does not share FAST's ring-bucketing/sort path.
+  void process_super_ntu_legacy(const sensor_msgs::PointCloud2::ConstPtr &msg,
+                                PointCloudXYZI::Ptr &pcl_out,
+                                double blind_m, double maxrange_m,
+                                int filter_rate);
   void set(bool feat_en, int lid_type, double bld, int pfilt_num);
 
   // sensor_msgs::PointCloud2::ConstPtr pointcloud;
@@ -172,6 +178,9 @@ public:
 private:
   void avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg);
   void oust64_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);
+  void super_ntu_legacy_oust64_handler(
+      const sensor_msgs::PointCloud2::ConstPtr &msg, double blind_m,
+      double maxrange_m, int filter_rate);
   void velodyne_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);
   void xt32_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);
   void Pandar128_handler(const sensor_msgs::PointCloud2::ConstPtr &msg);

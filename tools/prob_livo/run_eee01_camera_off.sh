@@ -12,8 +12,11 @@ RUN_ROOT="${PROB_LIVO_RUN_ROOT:-$REPO_ROOT/results/prob_livo/runs}"
 RUN_ID="${PROB_LIVO_RUN_ID:-run_$(date +%Y%m%d_%H%M%S)}"
 RATE="${PROB_LIVO_BAG_RATE:-1.0}"
 CONFIG="$REPO_ROOT/config/NTU_VIRAL.yaml"
+CONFIG_OVERLAY="${PROB_LIVO_CONFIG_OVERLAY:-}"
+INPUT_SEMANTICS="${PROB_LIVO_INPUT_SEMANTICS:-fast_native}"
 
-if [[ ! -f "$BAG" || ! -f "$CONFIG" ]]; then
+if [[ ! -f "$BAG" || ! -f "$CONFIG" || \
+      ( -n "$CONFIG_OVERLAY" && ! -f "$CONFIG_OVERLAY" ) ]]; then
   echo "ERR: missing bag or config" >&2
   exit 2
 fi
@@ -60,9 +63,13 @@ if ! rosnode list >/dev/null 2>&1; then
 fi
 
 rosparam load "$CONFIG"
+if [[ -n "$CONFIG_OVERLAY" ]]; then
+  rosparam load "$CONFIG_OVERLAY"
+fi
 rosparam set /common/img_en 0
 rosparam set /common/lidar_en 1
 rosparam set /common/prob_livo_backend true
+rosparam set /common/prob_livo_input_semantics "$INPUT_SEMANTICS"
 rosparam set /common/prob_livo_trajectory_path "$RUN_DIR/trajectory.tum"
 rosparam set /imu/imu_en true
 rosparam set /evo/pose_output_en false
@@ -78,8 +85,13 @@ rosparam dump "$RUN_DIR/effective_rosparams.yaml"
   echo "bag_sha256: $(sha256sum "$BAG" | cut -d' ' -f1)"
   echo "config: $CONFIG"
   echo "config_sha256: $(sha256sum "$CONFIG" | cut -d' ' -f1)"
+  echo "config_overlay: ${CONFIG_OVERLAY:-none}"
+  if [[ -n "$CONFIG_OVERLAY" ]]; then
+    echo "config_overlay_sha256: $(sha256sum "$CONFIG_OVERLAY" | cut -d' ' -f1)"
+  fi
   echo "backend: ProbLioBackend P0-P4"
   echo "camera: OFF"
+  echo "input_semantics: $INPUT_SEMANTICS"
   echo "replayed_topics: /imu/imu,/os1_cloud_node1/points"
   echo "bag_rate: $RATE"
   echo "ros_master_uri: $ROS_MASTER_URI"
@@ -95,9 +107,11 @@ if ! kill -0 "$NODE_PID" 2>/dev/null; then
   exit 4
 fi
 
+RUN_START_EPOCH=$(date +%s)
 rosbag play "$BAG" --clock --rate "$RATE" --topics \
   /imu/imu /os1_cloud_node1/points >"$RUN_DIR/play.log" 2>&1
 PLAY_RC=$?
+RUN_END_EPOCH=$(date +%s)
 sleep 3
 kill -INT "$NODE_PID" 2>/dev/null || true
 wait "$NODE_PID" 2>/dev/null
@@ -137,6 +151,10 @@ fi
   echo "ground_truth_rc: $GT_RC"
   echo "evaluation_rc: $EVAL_RC"
   echo "trajectory_rows: $(wc -l < "$RUN_DIR/trajectory.tum" 2>/dev/null || echo 0)"
+  echo "trajectory_sha256: $(sha256sum "$RUN_DIR/trajectory.tum" 2>/dev/null | cut -d' ' -f1)"
+  if [[ -n "${RUN_START_EPOCH:-}" && -n "${RUN_END_EPOCH:-}" ]]; then
+    echo "runtime_seconds: $((RUN_END_EPOCH - RUN_START_EPOCH))"
+  fi
   echo "end_utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "run_rc: $RC"
 } >>"$RUN_DIR/meta.txt"

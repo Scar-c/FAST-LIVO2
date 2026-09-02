@@ -9,6 +9,7 @@
 #include "prob_livo/super_native/prob_qr_plane.h"
 
 #include <fstream>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -67,6 +68,14 @@ class ProbLioBackend {
     std::size_t qr_valid = 0;
     std::size_t weighted_measurements = 0;
     std::size_t legacy_measurements = 0;
+    std::size_t lidar_callbacks_received = 0;
+    std::size_t scheduler_epochs_emitted = 0;
+    std::size_t scheduler_lidar_pending_at_shutdown = 0;
+    std::size_t scheduler_lidar_discarded = 0;
+    std::size_t backend_epochs_attempted = 0;
+    std::size_t backend_epochs_success = 0;
+    std::size_t backend_epochs_rejected = 0;
+    std::size_t trajectory_rows = 0;
   };
 
   ProbLioBackend(StatesGroup &state, const Options &options);
@@ -81,6 +90,19 @@ class ProbLioBackend {
   const PointCloudXYZI::Ptr &world_scan() const { return world_scan_; }
   StatesGroup &state() { return state_; }
   const StatesGroup &state() const { return state_; }
+
+  // Runtime accounting hooks used by the FAST ROS shell. They record event
+  // ownership without creating a second scheduler or lifecycle authority.
+  void RecordLidarCallback() { ++counters_.lidar_callbacks_received; }
+  void RecordSchedulerEpochEmitted() { ++counters_.scheduler_epochs_emitted; }
+  void RecordSchedulerPendingLidar(std::size_t count) {
+    counters_.scheduler_lidar_pending_at_shutdown = count;
+  }
+  void RecordSchedulerDiscardedLidar(std::size_t count) {
+    counters_.scheduler_lidar_discarded += count;
+  }
+  double last_observation_time() const { return filter_.last_observation_time(); }
+  double filter_current_time() const { return filter_.current_time(); }
 
  private:
   bool ProcessImuInit(LidarMeasureGroup &measures, double epoch_end);
@@ -118,7 +140,7 @@ class ProbLioBackend {
   std::vector<LI2Sup::M3d> map_covariances_;
   std::vector<LI2Sup::ProbQrPlane> plane_covariances_;
   std::vector<Eigen::Vector4d> plane_coefficients_;
-  std::vector<bool> effect_mask_;
+  std::vector<std::uint8_t> effect_mask_;
 };
 
 }  // namespace prob_livo

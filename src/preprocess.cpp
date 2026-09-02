@@ -92,6 +92,54 @@ void Preprocess::process(const sensor_msgs::PointCloud2::ConstPtr &msg, PointClo
   *pcl_out = pl_surf;
 }
 
+void Preprocess::process_super_ntu_legacy(
+    const sensor_msgs::PointCloud2::ConstPtr &msg, PointCloudXYZI::Ptr &pcl_out,
+    double blind_m, double maxrange_m, int filter_rate)
+{
+  super_ntu_legacy_oust64_handler(msg, blind_m, maxrange_m, filter_rate);
+  *pcl_out = pl_surf;
+}
+
+void Preprocess::super_ntu_legacy_oust64_handler(
+    const sensor_msgs::PointCloud2::ConstPtr &msg, double blind_m,
+    double maxrange_m, int filter_rate)
+{
+  pl_surf.clear();
+  pl_corn.clear();
+  pl_full.clear();
+
+  pcl::PointCloud<ouster_ros::Point> source;
+  pcl::fromROSMsg(*msg, source);
+  pl_surf.reserve(source.size() / static_cast<std::size_t>(filter_rate) + 1);
+  const double blind2 = blind_m * blind_m;
+  const double maxrange2 = maxrange_m * maxrange_m;
+  for (std::size_t index = 0; index < source.size();
+       index += static_cast<std::size_t>(filter_rate)) {
+    const ouster_ros::Point &input = source.points[index];
+    if (!std::isfinite(input.x) || !std::isfinite(input.y) ||
+        !std::isfinite(input.z)) {
+      continue;
+    }
+    const double range2 = static_cast<double>(input.x) * input.x +
+        static_cast<double>(input.y) * input.y +
+        static_cast<double>(input.z) * input.z;
+    if (!(range2 > blind2 && range2 < maxrange2)) continue;
+
+    PointType output;
+    output.x = input.x;
+    output.y = input.y;
+    output.z = input.z;
+    output.intensity = input.intensity;
+    output.normal_x = 0.0f;
+    output.normal_y = 0.0f;
+    output.normal_z = 0.0f;
+    // Super's Ouster callback stores t(ns) as relative seconds in PointXTZIT;
+    // FAST's PointXYZINormal curvature convention is relative milliseconds.
+    output.curvature = static_cast<float>(input.t) / 1.0e6f;
+    pl_surf.push_back(output);
+  }
+}
+
 void Preprocess::avia_handler(const livox_ros_driver::CustomMsg::ConstPtr &msg)
 {
   pl_surf.clear();

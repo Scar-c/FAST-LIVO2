@@ -1,0 +1,54 @@
+#include "test_i3_support.h"
+
+#include <cmath>
+
+namespace prob_livo_test {
+
+int RunP4MapTimingTests(TestContext &context) {
+  StatesGroup state;
+  auto options = TestBackendOptions();
+  prob_livo::ProbLioBackend backend(state, options);
+  const auto points = MakePlanePoints();
+
+  for (int index = 0; index < 54; ++index) {
+    const double start = 0.01 * index;
+    const auto imu = std::vector<prob_livo::ImuSample>{
+        {start + 0.005, Eigen::Vector3d(0.0, 0.0, 9.7946),
+         Eigen::Vector3d::Zero()}};
+    LidarMeasureGroup packet = MakeBackendEpoch(start, start + 0.01, imu,
+                                                points);
+    context.Check(backend.ProcessEpoch(packet),
+                  "map-init timing fixture rejected an epoch");
+  }
+
+  context.Check(backend.lifecycle_state() == prob_livo::ProbLioLifecycle::RUN,
+                "map-init timing fixture did not reach RUN");
+  context.Check(backend.counters().imu_init_epochs == 50 &&
+                    backend.counters().map_init_epochs == 4,
+                "map-init timing count diverged from Super lifecycle");
+  context.Check(std::abs(backend.last_observation_time() - 0.54) < 1e-12,
+                "map_init did not advance the observation boundary");
+  context.Check(std::abs(backend.filter_current_time() - 0.495) < 1e-12,
+                "map_init unexpectedly propagated the filter");
+
+  const auto run_imu = std::vector<prob_livo::ImuSample>{
+      {0.545, Eigen::Vector3d(0.0, 0.0, 9.7946), Eigen::Vector3d::Zero()}};
+  const auto lookahead = ToRosImu(prob_livo::ImuSample{
+      0.555, Eigen::Vector3d(0.0, 0.0, 9.7946), Eigen::Vector3d::Zero()});
+  LidarMeasureGroup run_packet = MakeBackendEpoch(
+      0.54, 0.55, run_imu, points, lookahead);
+  context.Check(backend.ProcessEpoch(run_packet),
+                "first RUN timing bridge rejected the epoch");
+  context.Check(std::abs(backend.filter_current_time() - 0.55) < 1e-12,
+                "first RUN epoch did not reach its endpoint");
+  context.Check(std::abs(backend.last_observation_time() - 0.55) < 1e-12,
+                "first RUN observation boundary did not advance");
+  context.Check(backend.undistorted_scan()->size() == points.size(),
+                "first RUN undistorted cloud size mismatch");
+  context.Check(state.cov.allFinite(),
+                "first RUN covariance is not finite");
+  context.Record("G-P4.4 first_run_time", backend.filter_current_time());
+  return context.Passed() ? 0 : 1;
+}
+
+}  // namespace prob_livo_test

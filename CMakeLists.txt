@@ -211,6 +211,30 @@ target_link_libraries(prob_livo_i3_tests
   ${OpenMP_CXX_FLAGS}
 )
 
+# Prompt-4 corrective gates.  These exercise the production Super-input
+# compatibility path and the backend's map-init observation boundary without
+# starting the later visual/I4 integration stage.
+add_executable(prob_livo_p4_tests
+  tests/prob_livo/test_p4_main.cpp
+  tests/prob_livo/test_p4_input_semantics.cpp
+  tests/prob_livo/test_p4_map_timing.cpp
+)
+target_include_directories(prob_livo_p4_tests PRIVATE
+  tests/prob_livo
+  include/prob_livo/super_native
+)
+target_link_libraries(prob_livo_p4_tests
+  pre
+  prob_livo_backend
+  prob_livo_eskf
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Sophus_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${OpenMP_CXX_FLAGS}
+)
+
 # Add the main executable
 add_executable(fastlivo_mapping src/main.cpp)
 

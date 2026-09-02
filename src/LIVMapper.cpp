@@ -48,7 +48,11 @@ LIVMapper::LIVMapper(ros::NodeHandle &nh)
   path.header.frame_id = "camera_init";
 }
 
-LIVMapper::~LIVMapper() {}
+LIVMapper::~LIVMapper() {
+  if (prob_livo_backend_) {
+    prob_livo_backend_->RecordSchedulerPendingLidar(lid_raw_data_buffer.size());
+  }
+}
 
 void LIVMapper::readParameters(ros::NodeHandle &nh)
 {
@@ -61,6 +65,24 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
   nh.param<bool>("common/prob_livo_backend", prob_livo_backend_enabled_, false);
   nh.param<string>("common/prob_livo_trajectory_path",
                   prob_livo_trajectory_path_, "");
+  std::string input_semantics_name;
+  nh.param<string>("common/prob_livo_input_semantics", input_semantics_name,
+                   "fast_native");
+  if (!prob_livo::ParseInputSemantics(input_semantics_name,
+                                      prob_livo_input_semantics_)) {
+    throw std::runtime_error("unknown common/prob_livo_input_semantics: " +
+                             input_semantics_name);
+  }
+  nh.param<double>("prob_livo/super_blind", prob_livo_super_blind_, 2.0);
+  nh.param<double>("prob_livo/super_maxrange", prob_livo_super_maxrange_,
+                   150.0);
+  nh.param<int>("prob_livo/super_filter_rate", prob_livo_super_filter_rate_,
+                3);
+  if (prob_livo_super_blind_ <= 0.0 ||
+      prob_livo_super_maxrange_ <= prob_livo_super_blind_ ||
+      prob_livo_super_filter_rate_ <= 0) {
+    throw std::runtime_error("invalid Super NTU input semantics parameters");
+  }
 
   nh.param<bool>("vio/normal_en", normal_en, true);
   nh.param<bool>("vio/inverse_composition_en", inverse_composition_en, false);
@@ -760,18 +782,31 @@ void LIVMapper::RGBpointBodyLidarToIMU(PointType const *const pi, PointType *con
 void LIVMapper::standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
 {
   if (!lidar_en) return;
+  if (prob_livo_backend_) prob_livo_backend_->RecordLidarCallback();
   mtx_buffer.lock();
 
-  double cur_head_time = msg->header.stamp.toSec() + lidar_time_offset;
+  const double cur_head_time = prob_livo::LidarHeaderTime(
+      prob_livo_input_semantics_, msg->header.stamp.toSec(),
+      lidar_time_offset);
   // cout<<"got feature"<<endl;
   if (cur_head_time < last_timestamp_lidar)
   {
     ROS_ERROR("lidar loop back, clear buffer");
+    if (prob_livo_backend_)
+      prob_livo_backend_->RecordSchedulerDiscardedLidar(
+          lid_raw_data_buffer.size());
     lid_raw_data_buffer.clear();
   }
   // ROS_INFO("get point cloud at time: %.6f", msg->header.stamp.toSec());
   PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
-  p_pre->process(msg, ptr);
+  if (prob_livo_input_semantics_ ==
+      prob_livo::InputSemantics::kSuperNtuLegacy) {
+    p_pre->process_super_ntu_legacy(msg, ptr, prob_livo_super_blind_,
+                                    prob_livo_super_maxrange_,
+                                    prob_livo_super_filter_rate_);
+  } else {
+    p_pre->process(msg, ptr);
+  }
   lid_raw_data_buffer.push_back(ptr);
   lid_header_time_buffer.push_back(cur_head_time);
   last_timestamp_lidar = cur_head_time;
@@ -988,6 +1023,7 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
 
     meas.lio_vio_flg = LIO; // process lidar topic, so timestamp should be lidar scan end.
     meas.measures.push_back(m);
+    if (prob_livo_backend_) prob_livo_backend_->RecordSchedulerEpochEmitted();
     // ROS_INFO("ONlY HAS LiDAR and IMU, NO IMAGE!");
     lidar_pushed = false; // sync one whole lidar scan.
     return true;

@@ -251,6 +251,9 @@ class ProbESKF19 {
   void SeedImuHistory(const ImuSample &imu);
   void SetObservationWindow(double last_observation_time,
                            double current_observation_time);
+  void SetLastObservationTime(double observation_time) {
+    last_observation_time_ = observation_time;
+  }
   void SetImuScale(double imu_scale) { options_.imu_scale = imu_scale; }
   void SetGravityNorm(double gravity_norm) { options_.gravity_norm = gravity_norm; }
 
@@ -263,9 +266,9 @@ class ProbESKF19 {
 
   double current_time() const { return current_time_; }
   double last_imu_time() const { return last_imu_time_; }
+  double last_observation_time() const { return last_observation_time_; }
   bool has_imu_history() const { return has_last_imu_; }
   PropagationSnapshot CurrentPropagationSnapshot() const;
-  double last_observation_time() const { return last_observation_time_; }
   int last_update_iterations() const { return last_update_iterations_; }
   bool need_converge() const { return need_converge_; }
   const Vector19 &last_increment() const { return last_increment_; }

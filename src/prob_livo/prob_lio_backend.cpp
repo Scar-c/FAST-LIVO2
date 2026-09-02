@@ -81,7 +81,7 @@ ProbLioBackend::~ProbLioBackend() {
     std::ofstream counters(options_.trajectory_path + ".counters.yaml",
                             std::ios::out | std::ios::trunc);
     if (counters.is_open()) {
-      counters << "schema_version: 1\n"
+      counters << "schema_version: 2\n"
                << "successful_epochs: " << counters_.successful_epochs << "\n"
                << "imu_init_epochs: " << counters_.imu_init_epochs << "\n"
                << "map_init_epochs: " << counters_.map_init_epochs << "\n"
@@ -97,48 +97,75 @@ ProbLioBackend::~ProbLioBackend() {
                << "weighted_measurements: " << counters_.weighted_measurements
                << "\n"
                << "legacy_measurements: " << counters_.legacy_measurements
-               << "\n";
+               << "\n"
+               << "lidar_callbacks_received: "
+               << counters_.lidar_callbacks_received << "\n"
+               << "scheduler_epochs_emitted: "
+               << counters_.scheduler_epochs_emitted << "\n"
+               << "scheduler_lidar_pending_at_shutdown: "
+               << counters_.scheduler_lidar_pending_at_shutdown << "\n"
+               << "scheduler_lidar_discarded: "
+               << counters_.scheduler_lidar_discarded << "\n"
+               << "backend_epochs_attempted: "
+               << counters_.backend_epochs_attempted << "\n"
+               << "backend_epochs_success: "
+               << counters_.backend_epochs_success << "\n"
+               << "backend_epochs_rejected: "
+               << counters_.backend_epochs_rejected << "\n"
+               << "trajectory_rows: " << counters_.trajectory_rows << "\n";
     }
   }
   if (trajectory_.is_open()) trajectory_.close();
 }
 
 bool ProbLioBackend::ProcessEpoch(LidarMeasureGroup &measures) {
+  ++counters_.backend_epochs_attempted;
   last_error_.clear();
+  const auto reject = [this](const std::string &message) {
+    SetError(message);
+    ++counters_.backend_epochs_rejected;
+    return false;
+  };
   if (measures.measures.empty() || measures.pcl_proc_cur == nullptr ||
       measures.lidar == nullptr) {
-    SetError("Prob-LIO scheduler packet is incomplete");
-    return false;
+    return reject("Prob-LIO scheduler packet is incomplete");
   }
   const double epoch_end = measures.measures.back().lio_time;
   if (!std::isfinite(epoch_end) || epoch_end < 0.0) {
-    SetError("Prob-LIO scheduler endpoint is invalid");
-    return false;
+    return reject("Prob-LIO scheduler endpoint is invalid");
   }
 
   if (!anchor_seeded_) {
     if (!lifecycle_.SeedSchedulerAnchor(measures)) {
-      SetError("cannot seed the Prob-LIO scheduler epoch anchor");
-      return false;
+      return reject("cannot seed the Prob-LIO scheduler epoch anchor");
     }
     anchor_seeded_ = true;
   }
   if (std::abs(measures.last_lio_update_time -
                lifecycle_.scheduler_epoch_anchor()) > 2e-8) {
-    SetError("scheduler epoch anchor was mutated outside lifecycle authority");
-    return false;
+    return reject("scheduler epoch anchor was mutated outside lifecycle authority");
   }
 
+  bool success = false;
   switch (lifecycle_.lifecycle()) {
     case ProbLioLifecycle::IMU_INIT:
-      return ProcessImuInit(measures, epoch_end);
+      success = ProcessImuInit(measures, epoch_end);
+      break;
     case ProbLioLifecycle::MAP_INIT:
-      return ProcessMapInit(measures, epoch_end);
+      success = ProcessMapInit(measures, epoch_end);
+      break;
     case ProbLioLifecycle::RUN:
-      return ProcessRun(measures, epoch_end);
+      success = ProcessRun(measures, epoch_end);
+      break;
+    default:
+      return reject("unknown Prob-LIO lifecycle state");
   }
-  SetError("unknown Prob-LIO lifecycle state");
-  return false;
+  if (success) {
+    ++counters_.backend_epochs_success;
+  } else {
+    ++counters_.backend_epochs_rejected;
+  }
+  return success;
 }
 
 bool ProbLioBackend::ProcessImuInit(LidarMeasureGroup &measures,
@@ -165,6 +192,9 @@ bool ProbLioBackend::ProcessImuInit(LidarMeasureGroup &measures,
 bool ProbLioBackend::ProcessMapInit(LidarMeasureGroup &measures,
                                     double epoch_end) {
   if (!InsertInitialMap(*measures.lidar)) return false;
+  // Super map_init() advances last_obs_time without propagating the filter.
+  // The first RUN epoch then bridges from this boundary with accepted IMU.
+  filter_.SetLastObservationTime(epoch_end);
   if (!lifecycle_.CommitConsumedEpoch(measures, epoch_end)) {
     SetError("failed to commit the map-init scheduler epoch");
     return false;
@@ -442,6 +472,7 @@ void ProbLioBackend::AppendTrajectory(double timestamp) {
               << " " << state_.pos_end.y() << " " << state_.pos_end.z() << " "
               << quaternion.x() << " " << quaternion.y() << " "
               << quaternion.z() << " " << quaternion.w() << "\n";
+  ++counters_.trajectory_rows;
   trajectory_.flush();
 }
 
