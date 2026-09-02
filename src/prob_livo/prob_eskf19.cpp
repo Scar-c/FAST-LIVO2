@@ -68,6 +68,21 @@ void ProbESKF19::ResetImuHistory() {
   last_imu_time_ = -1.0;
   current_time_ = 0.0;
   last_imu_ = ImuSample();
+  last_global_acceleration_.setZero();
+  last_angular_velocity_.setZero();
+}
+
+void ProbESKF19::SeedImuHistory(const ImuSample &imu) {
+  if (!imu.acceleration.allFinite() || !imu.angular_velocity.allFinite() ||
+      !std::isfinite(imu.timestamp)) {
+    return;
+  }
+  last_imu_ = imu;
+  last_imu_time_ = imu.timestamp;
+  current_time_ = imu.timestamp;
+  has_last_imu_ = true;
+  last_global_acceleration_.setZero();
+  last_angular_velocity_.setZero();
 }
 
 void ProbESKF19::SetObservationWindow(double last_observation_time,
@@ -85,24 +100,32 @@ Matrix12 ProbESKF19::NoiseCovariance(const Options &options) {
   return noise;
 }
 
-bool ProbESKF19::Predict(const ImuSample &imu) {
+PropagationSnapshot ProbESKF19::CurrentPropagationSnapshot() const {
+  PropagationSnapshot snapshot;
+  snapshot.timestamp = current_time_;
+  snapshot.rotation = state_.rot_end;
+  snapshot.position = state_.pos_end;
+  snapshot.velocity = state_.vel_end;
+  snapshot.acceleration = last_global_acceleration_;
+  snapshot.angular_velocity = last_angular_velocity_;
+  return snapshot;
+}
+
+bool ProbESKF19::Predict(const ImuSample &imu,
+                         PropagationSnapshot *accepted_snapshot) {
   if (!imu.acceleration.allFinite() || !imu.angular_velocity.allFinite() ||
       !std::isfinite(imu.timestamp)) {
     return false;
   }
 
   if (!has_last_imu_) {
-    last_imu_ = imu;
-    last_imu_time_ = imu.timestamp;
-    current_time_ = imu.timestamp;
-    has_last_imu_ = true;
+    SeedImuHistory(imu);
     return false;
   }
 
   if (imu.timestamp <= last_observation_time_) {
     last_imu_ = imu;
     last_imu_time_ = imu.timestamp;
-    current_time_ = imu.timestamp;
     return false;
   }
 
@@ -161,9 +184,14 @@ bool ProbESKF19::Predict(const ImuSample &imu) {
   state_.pos_end += state_.vel_end * dt + 0.5 * global_acceleration * dt * dt;
   state_.vel_end += global_acceleration * dt;
   state_.rot_end = state_.rot_end * ExpSO3(angular_velocity * dt);
+  last_global_acceleration_ = global_acceleration;
+  last_angular_velocity_ = angular_velocity;
 
   last_imu_ = imu;
   last_imu_time_ = imu.timestamp;
+  if (accepted_snapshot != nullptr) {
+    *accepted_snapshot = CurrentPropagationSnapshot();
+  }
   return true;
 }
 

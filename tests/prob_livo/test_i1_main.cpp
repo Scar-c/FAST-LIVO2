@@ -6,6 +6,7 @@ int RunRetractionTests(TestContext &context);
 int RunPredictTests(TestContext &context);
 int RunUpdateTests(TestContext &context);
 int RunExposureTests(TestContext &context);
+int RunSo3GoldenTests(TestContext &context);
 }  // namespace prob_livo_test
 
 int main() {
@@ -29,7 +30,11 @@ int main() {
   prob_livo_test::RunExposureTests(exposure);
   exposure.Print("G-I1.5/G-I1.7/G-I1.8 exposure and covariance validity");
 
+  prob_livo_test::TestContext so3;
+  prob_livo_test::RunSo3GoldenTests(so3);
+  so3.Print("G-I1.SO3 actual Super golden parity");
+
   const bool passed = layout.Passed() && retraction.Passed() && predict.Passed() &&
-                      update.Passed() && exposure.Passed();
+                      update.Passed() && exposure.Passed() && so3.Passed();
   return passed ? 0 : 1;
 }

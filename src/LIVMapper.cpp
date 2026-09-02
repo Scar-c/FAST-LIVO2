@@ -11,6 +11,7 @@ which is included as part of this source code package.
 */
 
 #include "LIVMapper.h"
+#include "prob_livo/prob_imu_adapter.h"
 
 LIVMapper::LIVMapper(ros::NodeHandle &nh)
     : extT(0, 0, 0),
@@ -1012,19 +1013,20 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
         if (lid_header_time_buffer.front() > img_capture_time) break;
         auto pcl(lid_raw_data_buffer.front()->points);
         double frame_header_time(lid_header_time_buffer.front());
-        float max_offs_time_ms = (m.lio_time - frame_header_time) * 1000.0f;
 
         for (int i = 0; i < pcl.size(); i++)
         {
-          auto pt = pcl[i];
-          if (pcl[i].curvature < max_offs_time_ms)
+          PointType pt;
+          const prob_livo::LivoPointBucket bucket =
+              prob_livo::RebaseLivoPoint(
+                  pcl[i], frame_header_time, meas.last_lio_update_time,
+                  m.lio_time, pt);
+          if (bucket == prob_livo::LivoPointBucket::kCurrent)
           {
-            pt.curvature += (frame_header_time - meas.last_lio_update_time) * 1000.0f;
             meas.pcl_proc_cur->points.push_back(pt);
           }
           else
           {
-            pt.curvature += (frame_header_time - m.lio_time) * 1000.0f;
             meas.pcl_proc_next->points.push_back(pt);
           }
         }

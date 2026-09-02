@@ -197,6 +197,16 @@ struct ImuSample {
   Eigen::Vector3d angular_velocity = Eigen::Vector3d::Zero();
 };
 
+/** One authoritative Super-style snapshot used by scan undistortion. */
+struct PropagationSnapshot {
+  double timestamp = 0.0;
+  Eigen::Matrix3d rotation = Eigen::Matrix3d::Identity();
+  Eigen::Vector3d position = Eigen::Vector3d::Zero();
+  Eigen::Vector3d velocity = Eigen::Vector3d::Zero();
+  Eigen::Vector3d acceleration = Eigen::Vector3d::Zero();
+  Eigen::Vector3d angular_velocity = Eigen::Vector3d::Zero();
+};
+
 struct Options {
   int num_iterations = 3;
   double quit_eps = 1e-6;
@@ -238,16 +248,23 @@ class ProbESKF19 {
   const Options &options() const { return options_; }
 
   void ResetImuHistory();
+  void SeedImuHistory(const ImuSample &imu);
   void SetObservationWindow(double last_observation_time,
                            double current_observation_time);
+  void SetImuScale(double imu_scale) { options_.imu_scale = imu_scale; }
+  void SetGravityNorm(double gravity_norm) { options_.gravity_norm = gravity_norm; }
 
   // The first sample establishes the midpoint history.  Subsequent calls use
   // the exact Super trapezoidal/midpoint propagation semantics.
-  bool Predict(const ImuSample &imu);
+  bool Predict(const ImuSample &imu,
+               PropagationSnapshot *accepted_snapshot = nullptr);
 
   bool UpdateObserve(const ObservationCallback &observation);
 
   double current_time() const { return current_time_; }
+  double last_imu_time() const { return last_imu_time_; }
+  bool has_imu_history() const { return has_last_imu_; }
+  PropagationSnapshot CurrentPropagationSnapshot() const;
   double last_observation_time() const { return last_observation_time_; }
   int last_update_iterations() const { return last_update_iterations_; }
   bool need_converge() const { return need_converge_; }
@@ -265,6 +282,8 @@ class ProbESKF19 {
   double last_imu_time_ = -1.0;
   double last_observation_time_ = -std::numeric_limits<double>::infinity();
   double current_observation_time_ = std::numeric_limits<double>::infinity();
+  Eigen::Vector3d last_global_acceleration_ = Eigen::Vector3d::Zero();
+  Eigen::Vector3d last_angular_velocity_ = Eigen::Vector3d::Zero();
 
   int last_update_iterations_ = 0;
   bool need_converge_ = false;
