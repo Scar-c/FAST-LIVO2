@@ -3,6 +3,9 @@
 ## Agent State Consensus
 
 - Start frontier: `df83f635134a1b1915568dcfa491eaa7d37dc22a`.
+- User-requested action: implement and use a repository-owned in-process
+  offline production runner first, with the current FAST-LIVO2/LIVO2-native
+  interfaces; later user direction fixed offline acceleration to TBB32.
 - Current implementation frontier: `3eec40cf89d8359bc80cce81979b3d73b6553a67`.
 - Final online verification was run from clean registered-prompt HEAD `210e2ead7829dab3e9f8eeed2223f0ababc07db9`.
 - Branch: `prob-livo`; reference: `prob-lio` at `9fc949f46291c0fa76e5b7cdb372c940eb4b3f6e`.
@@ -243,4 +246,3 @@ Legacy Super-host Prob-P4 baseline      = recorded
 FAST-host + Super-input parity baseline = recorded as SUPER_INPUT_TRAJECTORY_NEAR_PARITY
 FAST-host + FAST-native-input result    = preserved separately
 ```
-
