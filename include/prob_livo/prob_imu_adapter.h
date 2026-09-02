@@ -53,6 +53,10 @@ class ProbImuAdapter {
     Eigen::Vector3d lidar_to_imu_translation = Eigen::Vector3d::Zero();
     Eigen::Matrix3d lidar_to_robot_yaw = Eigen::Matrix3d::Identity();
     Eigen::Vector3d robot_origin = Eigen::Vector3d::Zero();
+    // FAST-native scheduling bridges the state to the scan endpoint with a
+    // non-consuming IMU look-ahead.  Legacy Super leaves the state at the
+    // last consumed IMU and undistorts later points in the raw sensor frame.
+    bool bridge_to_epoch_endpoint = true;
     double time_tolerance = 1e-9;
   };
 

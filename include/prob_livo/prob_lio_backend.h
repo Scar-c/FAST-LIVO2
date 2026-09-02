@@ -46,6 +46,7 @@ class ProbLioBackend {
     LI2Sup::P2pWeightMode p2p_weight_mode = LI2Sup::P2pWeightMode::ProbLivo2;
     LI2Sup::CovValidationMode covariance_validation_mode =
         LI2Sup::CovValidationMode::Light;
+    bool legacy_super_timing = false;
     Eigen::Matrix3d lidar_to_imu_rotation = Eigen::Matrix3d::Identity();
     Eigen::Vector3d lidar_to_imu_translation = Eigen::Vector3d::Zero();
     Eigen::Matrix3d lidar_to_robot_yaw = Eigen::Matrix3d::Identity();

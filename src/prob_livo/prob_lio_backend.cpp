@@ -35,6 +35,7 @@ ProbImuAdapter::Options MakeAdapterOptions(
   adapter_options.lidar_to_imu_translation = options.lidar_to_imu_translation;
   adapter_options.lidar_to_robot_yaw = options.lidar_to_robot_yaw;
   adapter_options.robot_origin = options.robot_origin;
+  adapter_options.bridge_to_epoch_endpoint = !options.legacy_super_timing;
   adapter_options.time_tolerance = 2e-8;
   return adapter_options;
 }
@@ -218,7 +219,7 @@ bool ProbLioBackend::ConvertLookahead(
 bool ProbLioBackend::ProcessRun(LidarMeasureGroup &measures, double epoch_end) {
   ImuSample lookahead;
   const ImuSample *lookahead_ptr = nullptr;
-  if (measures.imu_lookahead != nullptr) {
+  if (measures.imu_lookahead != nullptr && !options_.legacy_super_timing) {
     if (!ConvertLookahead(measures.imu_lookahead, lookahead)) {
       SetError("scheduler supplied an invalid Prob-LIO IMU look-ahead");
       return false;
@@ -245,7 +246,8 @@ bool ProbLioBackend::ProcessRun(LidarMeasureGroup &measures, double epoch_end) {
   }
   ++counters_.successful_epochs;
   ++counters_.run_epochs;
-  AppendTrajectory(epoch_end);
+  AppendTrajectory(options_.legacy_super_timing ? filter_.current_time()
+                                                : epoch_end);
   return true;
 }
 

@@ -63,6 +63,35 @@ int RunP4MapTimingTests(TestContext &context) {
   context.Check(state.cov.allFinite(),
                 "first RUN covariance is not finite");
   context.Record("G-P4.4 first_run_time", backend.filter_current_time());
+
+  // Legacy Super does not consume the first IMU after the scan endpoint as a
+  // look-ahead.  Keep this mode-specific seam covered without changing the
+  // FAST-native endpoint contract above.
+  StatesGroup legacy_state;
+  auto legacy_options = TestBackendOptions();
+  legacy_options.legacy_super_timing = true;
+  prob_livo::ProbLioBackend legacy_backend(legacy_state, legacy_options);
+  for (int index = 0; index < 54; ++index) {
+    const double start = 0.01 * index;
+    const auto imu = std::vector<prob_livo::ImuSample>{
+        {start + 0.005, Eigen::Vector3d(0.0, 0.0, 9.7946),
+         Eigen::Vector3d::Zero()}};
+    LidarMeasureGroup packet =
+        MakeBackendEpoch(start, start + 0.01, imu, points);
+    context.Check(legacy_backend.ProcessEpoch(packet),
+                  "legacy timing fixture rejected an init/map epoch");
+  }
+  const auto legacy_run_imu = std::vector<prob_livo::ImuSample>{
+      {0.545, Eigen::Vector3d(0.0, 0.0, 9.7946), Eigen::Vector3d::Zero()}};
+  LidarMeasureGroup legacy_run_packet =
+      MakeBackendEpoch(0.54, 0.55, legacy_run_imu, points);
+  context.Check(legacy_backend.ProcessEpoch(legacy_run_packet),
+                "legacy timing fixture rejected a partial-endpoint RUN epoch");
+  context.Check(std::abs(legacy_backend.filter_current_time() - 0.545) < 1e-12,
+                "legacy timing unexpectedly consumed endpoint look-ahead");
+  context.Check(std::abs(legacy_backend.last_observation_time() - 0.55) <
+                    1e-12,
+                "legacy timing did not advance observation boundary");
   return context.Passed() ? 0 : 1;
 }
 

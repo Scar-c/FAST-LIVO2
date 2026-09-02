@@ -222,18 +222,21 @@ ProbImuAdapter::Result ProbImuAdapter::ProcessLioEpoch(
       latest_timestamp + options_.time_tolerance >= timing.epoch_end;
   bool use_lookahead = false;
   if (!endpoint_already_covered) {
-    if (lookahead_imu == nullptr || !FiniteImu(*lookahead_imu) ||
-        lookahead_imu->timestamp <= timing.epoch_end + options_.time_tolerance) {
-      SetFailure(result,
-                 "epoch endpoint requires a non-consuming IMU look-ahead");
-      return result;
+    if (options_.bridge_to_epoch_endpoint) {
+      if (lookahead_imu == nullptr || !FiniteImu(*lookahead_imu) ||
+          lookahead_imu->timestamp <= timing.epoch_end +
+                                      options_.time_tolerance) {
+        SetFailure(result,
+                   "epoch endpoint requires a non-consuming IMU look-ahead");
+        return result;
+      }
+      if (!packet_imu.empty() &&
+          lookahead_imu->timestamp <= packet_imu.back().timestamp) {
+        SetFailure(result, "IMU look-ahead is not after the scheduler packet");
+        return result;
+      }
+      use_lookahead = true;
     }
-    if (!packet_imu.empty() &&
-        lookahead_imu->timestamp <= packet_imu.back().timestamp) {
-      SetFailure(result, "IMU look-ahead is not after the scheduler packet");
-      return result;
-    }
-    use_lookahead = true;
   }
 
   for (const PointType &point : measures.pcl_proc_cur->points) {
@@ -262,8 +265,10 @@ ProbImuAdapter::Result ProbImuAdapter::ProcessLioEpoch(
       ++result.propagated_samples;
     }
   }
-  if (std::abs(filter.current_time() - timing.epoch_end) >
-      options_.time_tolerance) {
+  if (filter.current_time() > timing.epoch_end + options_.time_tolerance ||
+      (options_.bridge_to_epoch_endpoint &&
+       std::abs(filter.current_time() - timing.epoch_end) >
+           options_.time_tolerance)) {
     SetFailure(result, "ProbESKF19 did not reach the requested LIO endpoint");
     return result;
   }

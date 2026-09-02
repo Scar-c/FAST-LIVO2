@@ -208,6 +208,8 @@ void LIVMapper::initializeComponents()
     options.lidar_beam_error_deg = voxelmap_manager->config_setting_.beam_err_;
     options.lidar_to_imu_rotation = extR;
     options.lidar_to_imu_translation = extT;
+    options.legacy_super_timing =
+        prob_livo_input_semantics_ == prob_livo::InputSemantics::kSuperNtuLegacy;
     options.trajectory_path = prob_livo_trajectory_path_;
     prob_livo_backend_.reset(new prob_livo::ProbLioBackend(_state, options));
   }
@@ -862,18 +864,22 @@ void LIVMapper::imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in)
 {
   if (!imu_en) return;
 
-  if (last_timestamp_lidar < 0.0) return;
+  if (last_timestamp_lidar < 0.0 &&
+      prob_livo_input_semantics_ != prob_livo::InputSemantics::kSuperNtuLegacy)
+    return;
   // ROS_INFO("get imu at time: %.6f", msg_in->header.stamp.toSec());
   sensor_msgs::Imu::Ptr msg(new sensor_msgs::Imu(*msg_in));
   msg->header.stamp = ros::Time().fromSec(msg->header.stamp.toSec() - imu_time_offset);
   double timestamp = msg->header.stamp.toSec();
 
-  if (fabs(last_timestamp_lidar - timestamp) > 0.5 && (!ros_driver_fix_en))
+  if (last_timestamp_lidar >= 0.0 &&
+      fabs(last_timestamp_lidar - timestamp) > 0.5 && (!ros_driver_fix_en))
   {
     ROS_WARN("IMU and LiDAR not synced! delta time: %lf .\n", last_timestamp_lidar - timestamp);
   }
 
-  if (ros_driver_fix_en) timestamp += std::round(last_timestamp_lidar - timestamp);
+  if (ros_driver_fix_en && last_timestamp_lidar >= 0.0)
+    timestamp += std::round(last_timestamp_lidar - timestamp);
   msg->header.stamp = ros::Time().fromSec(timestamp);
 
   mtx_buffer.lock();
