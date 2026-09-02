@@ -32,6 +32,8 @@ if [[ -e "$RUN_DIR" ]]; then
   exit 2
 fi
 mkdir -p "$RUN_DIR/ros_log"
+mkdir -p "$RUN_DIR/ros_home"
+export ROS_HOME="$RUN_DIR/ros_home"
 export ROS_LOG_DIR="$RUN_DIR/ros_log"
 source /opt/ros/noetic/setup.bash
 source "$CATKIN_WS/devel/setup.bash"
