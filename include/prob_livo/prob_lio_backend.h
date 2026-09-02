@@ -3,6 +3,7 @@
 
 #include "prob_livo/prob_imu_adapter.h"
 #include "prob_livo/prob_lio_lifecycle.h"
+#include "prob_livo/prob_point_with_var_adapter.h"
 #include "prob_livo/super_native/OctVoxMap/OctVoxMap.hpp"
 #include "prob_livo/super_native/OctVoxMap/VoxelGridFilter.h"
 #include "prob_livo/super_native/prob_geometry_p0_p4.h"
@@ -77,6 +78,8 @@ class ProbLioBackend {
     std::size_t backend_epochs_success = 0;
     std::size_t backend_epochs_rejected = 0;
     std::size_t trajectory_rows = 0;
+    std::size_t adapted_scans = 0;
+    std::size_t adapted_points = 0;
   };
 
   ProbLioBackend(StatesGroup &state, const Options &options);
@@ -89,6 +92,12 @@ class ProbLioBackend {
   const std::string &last_error() const { return last_error_; }
   const PointCloudXYZI::Ptr &undistorted_scan() const { return undistorted_scan_; }
   const PointCloudXYZI::Ptr &world_scan() const { return world_scan_; }
+  const std::vector<pointWithVar> &current_scan_point_with_var() const {
+    return point_with_var_adapter_.output().points;
+  }
+  const std::vector<ProbPointIdentity> &current_scan_point_identities() const {
+    return point_with_var_adapter_.output().identities;
+  }
   StatesGroup &state() { return state_; }
   const StatesGroup &state() const { return state_; }
 
@@ -133,6 +142,7 @@ class ProbLioBackend {
   Options options_;
   ProbESKF19 filter_;
   ProbImuAdapter imu_adapter_;
+  ProbPointWithVarAdapter point_with_var_adapter_;
   ProbLioLifecycleAuthority lifecycle_;
   std::shared_ptr<LI2Sup::OctVoxMap<LI2Sup::V3, LI2Sup::scalar>> map_;
   LI2Sup::VoxelGridClosest<PointType> downsample_filter_;

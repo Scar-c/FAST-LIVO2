@@ -1,10 +1,12 @@
 # Prob-LIVO Integration Specification
 
-Status: Prompt 5 / I3 divergence attribution; I0, I1, and I2 are
-closed/owner-verified. I3 is `CLOSED/PASS — Owner audit pending` with final
-classification `I3_DIVERGENCE_NUMERIC_ACCEPTED`. The Super-input EEE01
-comparison remains `SUPER_INPUT_TRAJECTORY_NEAR_PARITY`; the historical
-FAST-native result remains a separate control.
+Status: Prompt 6 / I3 numeric closure and I4 current-scan adapter; I0, I1,
+I2, and I3 are `CLOSED / OWNER VERIFIED`. I3 final classification is
+`NUMERIC_IMPLEMENTATION_DIFFERENCE_CONFIRMED`. I4 is
+`CLOSED/PASS — Owner audit pending`; camera/VIO remains OFF and I5–I8 are not
+started. The Super-input EEE01 comparison remains
+`SUPER_INPUT_TRAJECTORY_NEAR_PARITY`; the historical FAST-native result
+remains a separate control.
 
 This is the single current-truth authority for the FAST-LIVO2-hosted Prob-LIVO
 integration. Historical notes and future prompts must not redefine these
@@ -805,3 +807,27 @@ is `I3_DIVERGENCE_NUMERIC_ACCEPTED`. No production fix is needed: formulas,
 input semantics, lifecycle, map authority, gate outcomes, timestamps, and
 current online/offline contracts remain stable. Temporary selected-epoch
 diagnostics were removed before rebuild. I4 is not started.
+
+## Prompt 6 / I3 numeric closure and I4 current-scan adapter
+
+The Prompt-6 58-IMU fixture uses the same first 58 `/imu/imu` messages as the
+Prompt-5 initialization trace. M1–M4 separate scalar width from recurrence
+operation order. The measured float-legacy versus double-migrated maximum
+mean-acc delta is `3.818890005813027e-06`, mean-gyro delta is
+`1.1872079953534493e-09`, and imu-scale delta is `4.76837158203125e-07`.
+The SO(3) float/double split gives
+`||Log(R_float^T R_double)|| = 0.0005217556475790149 rad`; initial P18
+maximum absolute delta is `1.351996054173299e-11`. Samples, gravity/bias
+intent, and covariance semantics are identical in all variants. I3 is now
+`NUMERIC_IMPLEMENTATION_DIFFERENCE_CONFIRMED` and production remains double.
+
+I4 adds `ProbPointWithVarAdapter` at the Prob current-scan boundary. It
+consumes scan-end IMU-frame points and P1 sensor covariance, emits FAST's
+`pointWithVar` with `point_i`, inverse-extrinsic `point_b`, shared-pose
+`point_w`, `body_var = Sigma_I`, and `var = var_nostate = R_WI Sigma_I
+R_WI^T`. It preserves scan/source order and intensity/relative-time sidecar
+metadata. Normals are explicitly unavailable until I5. The adapter is
+constructed after `BuildAndSolveScan()` and before `UpdateMap()`; it does not
+call Process2, undistort, query VoxelMapManager, add pose covariance, fit
+planes, update `feat_map`, or invoke VIO. Runtime counters are
+`adapted_scans` and `adapted_points`.

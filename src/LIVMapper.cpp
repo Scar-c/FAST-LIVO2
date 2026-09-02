@@ -346,6 +346,7 @@ void LIVMapper::handleProbLio()
   _state = prob_livo_backend_->state();
   state_propagat = _state;
   feats_undistort = prob_livo_backend_->undistorted_scan();
+  _pv_list = prob_livo_backend_->current_scan_point_with_var();
   *pcl_w_wait_pub = *prob_livo_backend_->world_scan();
   if (pcl_w_wait_pub->empty()) return;
 

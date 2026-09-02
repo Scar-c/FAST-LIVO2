@@ -441,3 +441,18 @@ The first-divergence classification is `NUMERIC_ONLY`; the final Prompt5
 decision is `I3_DIVERGENCE_NUMERIC_ACCEPTED`. No precision downgrade, tuning,
 OMP limit, P5 association, visual runtime, or permanent diagnostic logging
 was added. I4 remains not started and I3 remains Owner-audit pending.
+
+## Prompt 6 Evidence
+
+Prompt 6 is registered at
+`prompts/prob_livo/prompt6_i3_numeric_close_i4_pointwithvar_adapter.md`.
+The bounded numeric fixture is
+`tools/prob_livo/attribute_i3_init_numeric.py`; its exact 58-sample JSON
+output was captured during the Prompt-6 run. I3 is closed as
+`NUMERIC_IMPLEMENTATION_DIFFERENCE_CONFIRMED` / `CLOSED / OWNER VERIFIED`.
+The I4 source audit and final gate report are recorded in
+`spec/prob_livo/PROMPT6_EVIDENCE.md`. The production adapter is
+`include/prob_livo/prob_point_with_var_adapter.h` plus
+`src/prob_livo/prob_point_with_var_adapter.cpp`; its focused gates are
+`tests/prob_livo/test_i4_point_with_var_adapter.cpp` and executable
+`prob_livo_i4_tests`.

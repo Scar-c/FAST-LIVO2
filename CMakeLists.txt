@@ -131,7 +131,10 @@ add_library(prob_livo_eskf
   src/prob_livo/prob_imu_adapter.cpp
 )
 target_link_libraries(prob_livo_eskf ${TBB_LIBRARY})
-add_library(prob_livo_backend src/prob_livo/prob_lio_backend.cpp)
+add_library(prob_livo_backend
+  src/prob_livo/prob_lio_backend.cpp
+  src/prob_livo/prob_point_with_var_adapter.cpp
+)
 target_include_directories(prob_livo_backend PRIVATE
   include/prob_livo/super_native
 )
@@ -257,6 +260,31 @@ target_link_libraries(prob_livo_p4_tests
   ${OpenCV_LIBRARIES}
   ${Sophus_LIBRARIES}
   ${Boost_LIBRARIES}
+  ${OpenMP_CXX_FLAGS}
+)
+
+# I4 current-scan adapter gates.  The target uses FAST's exact pointWithVar
+# type and does not enable camera/VIO runtime processing.
+add_executable(prob_livo_i4_tests
+  tests/prob_livo/test_i4_point_with_var_adapter.cpp
+)
+target_include_directories(prob_livo_i4_tests PRIVATE
+  tests/prob_livo
+  include/prob_livo/super_native
+)
+target_link_libraries(prob_livo_i4_tests
+  prob_livo_backend
+  prob_livo_eskf
+  vio
+  lio
+  pre
+  imu_proc
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Sophus_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${TBB_LIBRARY}
   ${OpenMP_CXX_FLAGS}
 )
 

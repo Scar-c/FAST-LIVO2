@@ -85,7 +85,7 @@ ProbLioBackend::~ProbLioBackend() {
     std::ofstream counters(options_.trajectory_path + ".counters.yaml",
                             std::ios::out | std::ios::trunc);
     if (counters.is_open()) {
-      counters << "schema_version: 2\n"
+      counters << "schema_version: 3\n"
                << "successful_epochs: " << counters_.successful_epochs << "\n"
                << "imu_init_epochs: " << counters_.imu_init_epochs << "\n"
                << "map_init_epochs: " << counters_.map_init_epochs << "\n"
@@ -116,7 +116,9 @@ ProbLioBackend::~ProbLioBackend() {
                << counters_.backend_epochs_success << "\n"
                << "backend_epochs_rejected: "
                << counters_.backend_epochs_rejected << "\n"
-               << "trajectory_rows: " << counters_.trajectory_rows << "\n";
+               << "trajectory_rows: " << counters_.trajectory_rows << "\n"
+               << "adapted_scans: " << counters_.adapted_scans << "\n"
+               << "adapted_points: " << counters_.adapted_points << "\n";
     }
   }
   if (trajectory_.is_open()) trajectory_.close();
@@ -240,6 +242,17 @@ bool ProbLioBackend::ProcessRun(LidarMeasureGroup &measures, double epoch_end) {
   counters_.undistorted_points += undistorted_scan_->size();
 
   if (!BuildAndSolveScan()) return false;
+  std::string adapter_error;
+  if (!point_with_var_adapter_.Build(
+          static_cast<std::uint64_t>(counters_.run_epochs),
+          *downsampled_scan_, points_body_, body_covariances_, state_.rot_end,
+          state_.pos_end, options_.lidar_to_imu_rotation,
+          options_.lidar_to_imu_translation, adapter_error)) {
+    SetError("Prob-LIO pointWithVar adapter failed: " + adapter_error);
+    return false;
+  }
+  ++counters_.adapted_scans;
+  counters_.adapted_points += point_with_var_adapter_.output().points.size();
   UpdateMap();
   BuildWorldScan();
 

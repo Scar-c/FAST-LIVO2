@@ -167,3 +167,24 @@ legacy but did not reproduce the full legacy float-state pipeline. The causal
 classification is `NUMERIC_ONLY`, and the final decision is
 `I3_DIVERGENCE_NUMERIC_ACCEPTED`; no production precision downgrade is
 justified. Temporary trace code was removed. I4 was not started.
+
+## Prompt 6 / I3 numeric closure and I4 adapter
+
+The exact first 58 EEE01 initialization IMUs were replayed through four
+source-faithful M1–M4 variants: float/double scalar width crossed with legacy
+and migrated mean recurrence. The remaining mean, scale, gravity, SO(3), and
+P18 differences are finite-precision/operation-order effects under identical
+input and covariance semantics. The measured SO(3) split is
+`0.0005217556475790149 rad` in `Log(R_float^T R_double)` and the P18 maximum
+absolute delta is `1.351996054173299e-11`. I3 is now
+`CLOSED / OWNER VERIFIED`, classified
+`NUMERIC_IMPLEMENTATION_DIFFERENCE_CONFIRMED`; production stays double.
+
+After that closure, I4 added a lean `ProbPointWithVarAdapter` for the current
+Prob scan. It maps scan-end IMU-frame points and P1 sensor covariance into the
+FAST `pointWithVar` contract, preserves source order and intensity/time
+metadata, and explicitly leaves normals unavailable for I5. It is wired into
+the camera-OFF Prob runtime only as a dormant current-scan producer with
+`adapted_scans`/`adapted_points` counters. It does not re-run FAST Process2,
+undistort twice, use FAST's LiDAR map, add pose covariance, fit planes, update
+`feat_map`, or invoke VIO.
