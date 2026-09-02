@@ -6,8 +6,8 @@
 set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CATKIN_WS="${PROB_LIVO_CATKIN_WS:-$(cd "$REPO_ROOT/../../.." && pwd)}"
-BAG="${1:-$REPO_ROOT/../../../bag/NTU/eee_01/eee_01.bag}"
+CATKIN_WS="${PROB_LIVO_CATKIN_WS:-$(cd "$REPO_ROOT/../.." && pwd)}"
+BAG="${1:-$REPO_ROOT/../../bag/NTU/eee_01/eee_01.bag}"
 RUN_ROOT="${PROB_LIVO_RUN_ROOT:-$REPO_ROOT/results/prob_livo/runs}"
 RUN_ID="${PROB_LIVO_RUN_ID:-run_$(date +%Y%m%d_%H%M%S)}"
 RATE="${PROB_LIVO_BAG_RATE:-1.0}"
