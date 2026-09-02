@@ -83,5 +83,5 @@ Filled after the focused bootstrap commit is created:
 Prompt 0 commit: this focused bootstrap commit; final SHA is reported with `git rev-parse HEAD`
 Final HEAD: reported with `git rev-parse HEAD`
 Final worktree: clean after commit
-Push status: blocked; network DNS failed and external push approval was rejected
+Push status: success; `origin/prob-livo` created at the bootstrap commit
 ```
