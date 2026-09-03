@@ -24,6 +24,15 @@
 
 namespace LI2Sup{
 
+struct OctVoxSupportId {
+  Eigen::Vector3i voxel_key = Eigen::Vector3i::Zero();
+  uint8_t local_index = 0;
+
+  OctVoxSupportId() = default;
+  OctVoxSupportId(const Eigen::Vector3i &key, uint8_t index)
+      : voxel_key(key), local_index(index) {}
+};
+
 template<int K, typename Point>
 class KNNHeap {
 public:
@@ -50,13 +59,16 @@ public:
   /// Prob-LIO S7 (P2): covariance of the representative point in the same
   /// slot. Zero when map covariance plumbing is disabled.
   std::array<Eigen::Matrix3d, K> covs_;
+  /// Stable diagnostic identity of the representative map subvoxel.
+  std::array<OctVoxSupportId, K> ids_;
   /// Prob-LIO P5 (S2/S10): accepted representative count N of the point in
   /// the same slot (S6 identity; zero when plumbing disabled).
   std::array<uint8_t, K> counts_;
 
   inline void try_insert(float dist2, const Point& pt,
                          const Eigen::Matrix3d& cov = Eigen::Matrix3d::Zero(),
-                         uint8_t rep_count = 0) {
+                         uint8_t rep_count = 0,
+                         const OctVoxSupportId &support_id = OctVoxSupportId()) {
     const bool not_full = (count < K);
     const bool should_insert = not_full || (dist2 < max_dist2_);
     
@@ -67,6 +79,7 @@ public:
       points_[insert_idx] = pt;
       covs_[insert_idx] = cov;
       counts_[insert_idx] = rep_count;
+      ids_[insert_idx] = support_id;
       
       if (not_full) {
         count++;
@@ -484,12 +497,14 @@ void OctVoxMap<Point, Scalar>::getTopK(const Point& point, KNNHeapType& top_K) c
   
   const int pre_voxel_ptr_size = 8;
   OctVoxType* top_voxels_2_search[pre_voxel_ptr_size];
+  KEY top_voxel_keys[pre_voxel_ptr_size];
   std::fill_n(top_voxels_2_search, pre_voxel_ptr_size, nullptr);
   
   for(uint8_t i = 0; i < pre_voxel_ptr_size; ++i)
   {
     KEY delta_key = mirror_axis.cwiseProduct(HKNN_neighbor_voxel[i]);
     KEY n_key = key + delta_key;
+    top_voxel_keys[i] = n_key;
     if (auto iter = grids_.find(n_key); iter != grids_.end()) {
       top_voxels_2_search[i] = &iter->second->second;
     }
@@ -517,7 +532,9 @@ void OctVoxMap<Point, Scalar>::getTopK(const Point& point, KNNHeapType& top_K) c
               const float dist2 = (__sub_point - point).squaredNorm();
               voxel_ptr->getPointCov(_local_idx, cov);
               voxel_ptr->getPointCount(_local_idx, rep_n);
-              top_K.try_insert(dist2, __sub_point, cov, rep_n);
+              top_K.try_insert(dist2, __sub_point, cov, rep_n,
+                               OctVoxSupportId(top_voxel_keys[neighbor_idx],
+                                               _local_idx));
             }
           }
         }
@@ -538,7 +555,8 @@ void OctVoxMap<Point, Scalar>::getTopK(const Point& point, KNNHeapType& top_K) c
             float dist2 = (__sub_point - point).squaredNorm();
             voxel_ptr->getPointCov(_local_idx, cov);
             voxel_ptr->getPointCount(_local_idx, rep_n);
-            top_K.try_insert(dist2, __sub_point, cov, rep_n);
+            top_K.try_insert(dist2, __sub_point, cov, rep_n,
+                             OctVoxSupportId(n_key, _local_idx));
           }
         }
       }
@@ -559,16 +577,22 @@ void OctVoxMap<Point, Scalar>::getTopK_VN(const Point& point, KNNHeapType& top_K
   KEY key = (point * inv_resolution_).array().floor().template cast<int>();
 
   std::vector<OctVoxType*> voxels_2_search;
+  std::vector<KEY> voxel_keys_2_search;
   voxels_2_search.reserve(19);
+  voxel_keys_2_search.reserve(19);
   for(std::size_t i = 0; i < 19; ++i) {
     KEY n_key = key + nearby_grids_[i];
     if (auto iter = grids_.find(n_key); iter != grids_.end()) {
       voxels_2_search.emplace_back(&iter->second->second);
+      voxel_keys_2_search.emplace_back(n_key);
     }
   }
 
   Point pt;
-  for(auto& voxel : voxels_2_search) {
+  for(std::size_t voxel_index = 0; voxel_index < voxels_2_search.size();
+      ++voxel_index) {
+    auto &voxel = voxels_2_search[voxel_index];
+    const KEY &n_key = voxel_keys_2_search[voxel_index];
     for(uint8_t _i = 0; _i < 8; ++_i) {
       Eigen::Matrix3d cov;
       uint8_t rep_n = 0;
@@ -576,7 +600,8 @@ void OctVoxMap<Point, Scalar>::getTopK_VN(const Point& point, KNNHeapType& top_K
       voxel->getPointCov(_i, cov);
       voxel->getPointCount(_i, rep_n);
       float dist2 = (pt - point).squaredNorm();
-      top_K.try_insert(dist2, pt, cov, rep_n);
+      top_K.try_insert(dist2, pt, cov, rep_n,
+                       OctVoxSupportId(n_key, _i));
     }
   }
 }

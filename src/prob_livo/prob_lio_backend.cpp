@@ -63,7 +63,8 @@ ProbLioBackend::ProbLioBackend(StatesGroup &state, const Options &options)
       imu_adapter_(MakeAdapterOptions(options)),
       map_(new LI2Sup::OctVoxMap<LI2Sup::V3, LI2Sup::scalar>(
           LI2Sup::OctVoxMap<LI2Sup::V3, LI2Sup::scalar>::Options{
-              static_cast<float>(options.map_resolution), options.map_capacity})) {
+              static_cast<float>(options.map_resolution), options.map_capacity})),
+      plane_provider_(*map_) {
   map_->SetCovStoragePrecision(options_.cov_storage_precision);
   downsample_filter_.setLeafSize(static_cast<float>(options_.voxel_size));
 

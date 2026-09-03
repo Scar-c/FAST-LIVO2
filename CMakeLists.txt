@@ -133,6 +133,7 @@ add_library(prob_livo_eskf
 target_link_libraries(prob_livo_eskf ${TBB_LIBRARY})
 add_library(prob_livo_backend
   src/prob_livo/prob_lio_backend.cpp
+  src/prob_livo/prob_plane_provider.cpp
   src/prob_livo/prob_point_with_var_adapter.cpp
 )
 target_include_directories(prob_livo_backend PRIVATE
@@ -273,6 +274,31 @@ target_include_directories(prob_livo_i4_tests PRIVATE
   include/prob_livo/super_native
 )
 target_link_libraries(prob_livo_i4_tests
+  prob_livo_backend
+  prob_livo_eskf
+  vio
+  lio
+  pre
+  imu_proc
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Sophus_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${TBB_LIBRARY}
+  ${OpenMP_CXX_FLAGS}
+)
+
+# I5 read-only Prob OctVox/HKNN/QR plane provider gates.  The provider is
+# constructed over production map storage; camera/VIO runtime remains off.
+add_executable(prob_livo_i5_tests
+  tests/prob_livo/test_i5_plane_provider.cpp
+)
+target_include_directories(prob_livo_i5_tests PRIVATE
+  tests/prob_livo
+  include/prob_livo/super_native
+)
+target_link_libraries(prob_livo_i5_tests
   prob_livo_backend
   prob_livo_eskf
   vio

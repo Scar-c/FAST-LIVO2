@@ -3,6 +3,7 @@
 
 #include "prob_livo/prob_imu_adapter.h"
 #include "prob_livo/prob_lio_lifecycle.h"
+#include "prob_livo/prob_plane_provider.h"
 #include "prob_livo/prob_point_with_var_adapter.h"
 #include "prob_livo/super_native/OctVoxMap/OctVoxMap.hpp"
 #include "prob_livo/super_native/OctVoxMap/VoxelGridFilter.h"
@@ -98,6 +99,7 @@ class ProbLioBackend {
   const std::vector<ProbPointIdentity> &current_scan_point_identities() const {
     return point_with_var_adapter_.output().identities;
   }
+  const ProbPlaneProvider &plane_provider() const { return plane_provider_; }
   StatesGroup &state() { return state_; }
   const StatesGroup &state() const { return state_; }
 
@@ -145,6 +147,7 @@ class ProbLioBackend {
   ProbPointWithVarAdapter point_with_var_adapter_;
   ProbLioLifecycleAuthority lifecycle_;
   std::shared_ptr<LI2Sup::OctVoxMap<LI2Sup::V3, LI2Sup::scalar>> map_;
+  ProbPlaneProvider plane_provider_;
   LI2Sup::VoxelGridClosest<PointType> downsample_filter_;
 
   bool anchor_seeded_ = false;
