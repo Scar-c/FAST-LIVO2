@@ -162,6 +162,8 @@ target_link_libraries(native_offline_reader_tests
 add_test(NAME native_offline_reader_tests COMMAND native_offline_reader_tests)
 add_test(NAME native_runner_status_tests
   COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/native_runner_status_test.sh)
+add_test(NAME cached_mean_oracle_tests
+  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/cached_mean_oracle_test.sh)
 
 # Link libraries to the executable
 target_link_libraries(fastlivo_mapping

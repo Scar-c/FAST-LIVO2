@@ -689,7 +689,11 @@ void VIOManager::retrieveFromVisualSparseMap(cv::Mat img, vector<pointWithVar> &
           pt->ref_patch = ref_ftr;
           pt->has_ref_patch_ = true;
         }
-        else { ref_ftr = pt->ref_patch; }
+        else
+        {
+          if (!pt->has_ref_patch_ || pt->ref_patch == nullptr) continue;
+          ref_ftr = pt->ref_patch;
+        }
       }
       else
       {
@@ -1037,8 +1041,9 @@ void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelO
       }
     }
 
-    Feature *previous_ref_patch = pt->ref_patch;
     const bool previous_has_ref_patch = pt->has_ref_patch_;
+    Feature *previous_ref_patch =
+        previous_has_ref_patch ? pt->ref_patch : nullptr;
     float score_max = -1000.;
     for (auto it = pt->obs_.begin(), ite = pt->obs_.end(); it != ite; ++it)
     {
@@ -1057,8 +1062,8 @@ void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelO
       double cos_angle = pf.dot(norm_vec);
       // if(fabs(cos_angle) < 0.86) continue; // 20 degree
 
-      float ref_mean;
-      if (abs(ref_patch_temp->mean_) < 1e-6)
+      float ref_mean = ref_patch_temp->mean_;
+      if (abs(ref_mean) < 1e-6)
       {
         float ref_sum = std::accumulate(patch_temp, patch_temp + patch_size_total, 0.0);
         ref_mean = ref_sum / patch_size_total;
@@ -1070,8 +1075,8 @@ void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelO
         if ((*itm)->id_ == ref_patch_temp->id_) continue;
         float *patch_cache = (*itm)->patch_;
 
-        float other_mean;
-        if (abs((*itm)->mean_) < 1e-6)
+        float other_mean = (*itm)->mean_;
+        if (abs(other_mean) < 1e-6)
         {
           float other_sum = std::accumulate(patch_cache, patch_cache + patch_size_total, 0.0);
           other_mean = other_sum / patch_size_total;
@@ -1147,6 +1152,7 @@ void VIOManager::projectPatchFromRefToCur(const unordered_map<VOXEL_LOCATION, Vo
     if (pt->is_normal_initialized_)
     {
       Feature *ref_ftr;
+      if (!pt->has_ref_patch_ || pt->ref_patch == nullptr) continue;
       ref_ftr = pt->ref_patch;
       // Feature* ref_ftr;
       V2D pc(new_frame_->w2c(pt->pos_));
@@ -1284,7 +1290,8 @@ void VIOManager::projectPatchFromRefToCur(const unordered_map<VOXEL_LOCATION, Vo
   {
     VisualPoint *pt = visual_submap->voxel_points[i];
 
-    if (!pt->is_normal_initialized_) continue;
+    if (!pt->is_normal_initialized_ || !pt->has_ref_patch_ ||
+        pt->ref_patch == nullptr) continue;
 
     Feature *ref_ftr;
     V2D pc(new_frame_->w2c(pt->pos_));
@@ -1359,9 +1366,10 @@ void VIOManager::precomputeReferencePatches(int level)
     const int scale = (1 << level);
 
     VisualPoint *pt = visual_submap->voxel_points[i];
-    cv::Mat img = pt->ref_patch->img_;
+    if (pt == nullptr || !pt->has_ref_patch_ || pt->ref_patch == nullptr)
+      continue;
 
-    if (pt == nullptr) continue;
+    cv::Mat img = pt->ref_patch->img_;
 
     double depth((pt->pos_ - pt->ref_patch->pos()).norm());
     V3D pf = pt->ref_patch->f_ * depth;

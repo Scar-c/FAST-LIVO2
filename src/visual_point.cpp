@@ -17,7 +17,8 @@ which is included as part of this source code package.
 
 VisualPoint::VisualPoint(const Vector3d &pos)
     : pos_(pos), previous_normal_(Vector3d::Zero()), normal_(Vector3d::Zero()),
-      is_converged_(false), is_normal_initialized_(false), has_ref_patch_(false)
+      is_converged_(false), is_normal_initialized_(false), has_ref_patch_(false),
+      ref_patch(nullptr)
 {
 }
 
@@ -38,7 +39,7 @@ void VisualPoint::addFrameRef(Feature *ftr)
 
 void VisualPoint::deleteFeatureRef(Feature *ftr)
 {
-  if (ref_patch == ftr)
+  if (has_ref_patch_ && ref_patch == ftr)
   {
     ref_patch = nullptr;
     has_ref_patch_ = false;
@@ -114,7 +115,7 @@ void VisualPoint::deleteNonRefPatchFeatures()
 {
   for (auto it = obs_.begin(); it != obs_.end();)
   {
-    if (*it != ref_patch)
+    if (!has_ref_patch_ || *it != ref_patch)
     {
       delete *it;
       it = obs_.erase(it);
