@@ -17,9 +17,11 @@ MEMORY_CSV="${PROB_LIVO_MEMORY_CSV:-}"
 MEMORY_LABEL="${PROB_LIVO_MEMORY_LABEL:-N0}"
 MEMORY_INTERVAL="${PROB_LIVO_MEMORY_INTERVAL:-2}"
 CONFIG="$NATIVE_ROOT/config/NTU_VIRAL.yaml"
+CAMERA_CONFIG="$NATIVE_ROOT/config/camera_NTU_VIRAL.yaml"
 NATIVE_RESULT="$NATIVE_ROOT/Log/result/$RUN_ID.txt"
 
-if [[ ! -f "$BAG" || ! -f "$CONFIG" || ! -x "$NATIVE_WS/devel/lib/fast_livo/fastlivo_mapping" ]]; then
+if [[ ! -f "$BAG" || ! -f "$CONFIG" || ! -f "$CAMERA_CONFIG" || \
+      ! -x "$NATIVE_WS/devel/lib/fast_livo/fastlivo_mapping" ]]; then
   echo "ERR: missing bag, native config, or native binary" >&2
   exit 2
 fi
@@ -77,6 +79,7 @@ if ! rosnode list >/dev/null 2>&1; then
 fi
 
 rosparam load "$CONFIG"
+rosparam load "$CAMERA_CONFIG" /laserMapping
 rosparam set /common/img_en 0
 rosparam set /common/lidar_en 1
 rosparam set /imu/imu_en true
@@ -103,6 +106,8 @@ fi
   echo "bag_sha256: $(sha256sum "$BAG" | cut -d' ' -f1)"
   echo "config: $CONFIG"
   echo "config_sha256: $(sha256sum "$CONFIG" | cut -d' ' -f1)"
+  echo "camera_config: $CAMERA_CONFIG"
+  echo "camera_config_sha256: $(sha256sum "$CAMERA_CONFIG" | cut -d' ' -f1)"
   echo "backend: FAST-LIVO2 native LIO"
   echo "camera_mode: off"
   echo "visual_state: OFF"
