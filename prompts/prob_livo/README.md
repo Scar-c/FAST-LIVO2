@@ -11,6 +11,7 @@ P6 / I4  pointWithVar adapter + numeric closure
 P7 / I5  corrective pointWithVar + ProbPlaneProvider
 P8 / I6  camera-ON visual closure + visual-gate ablation
 P9 / I6  corrective closure: QR Jacobian, validity split, hot-path/radius cleanup
+P10 / I6  dead-code hygiene + native-LIO/Prob-LIO memory characterization
 I7       downsample ablation cancelled; Super VoxelGridClosest frozen
 I8       generalization
 ```
@@ -56,3 +57,8 @@ The exact Prompt 9 text is registered at
 post-correction comparison of the normal default online ROS path against the
 canonical offline runner; deterministic one-callback stepping is not valid for
 that comparison.
+
+The exact Prompt 10 text is registered at
+`prompts/prob_livo/prompt10_native_lio_memory.md`. Prompt 10 is a bounded I6
+hygiene and eee_01 characterization task; it must stop after the N0/H0/H0-LIOONLY
+comparison and must not enter LIVO/H1/H2 or I8.
