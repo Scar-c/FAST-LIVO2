@@ -39,6 +39,7 @@ public:
   void handleFirstFrame();
   void stateEstimationAndMapping();
   void handleVIO();
+  void handleProbVio();
   void handleLIO();
   void handleProbLio();
   void savePCD();
@@ -168,12 +169,16 @@ public:
   // Prompt-3 camera-OFF backend switch.  The backend owns the ProbESKF19,
   // lifecycle and Super-native map; LIVMapper remains the ROS shell.
   bool prob_livo_backend_enabled_ = false;
+  bool prob_livo_camera_vio_enabled_ = false;
   bool prob_livo_first_scheduler_epoch_ = true;
   prob_livo::InputSemantics prob_livo_input_semantics_ =
       prob_livo::InputSemantics::kFastNative;
   double prob_livo_super_blind_ = 2.0;
   double prob_livo_super_maxrange_ = 150.0;
   int prob_livo_super_filter_rate_ = 3;
+  prob_livo::VisualPlaneGateMode prob_livo_visual_gate_mode_ =
+      prob_livo::VisualPlaneGateMode::kLivo2Prob3sigma;
+  std::string prob_livo_visual_gate_name_ = "livo2_prob_3sigma";
   std::string prob_livo_trajectory_path_;
   std::unique_ptr<prob_livo::ProbLioBackend> prob_livo_backend_;
 

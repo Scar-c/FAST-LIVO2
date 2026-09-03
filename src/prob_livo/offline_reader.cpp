@@ -33,7 +33,8 @@ bool OfflineReader::run(const OfflineOptions &options,
                         const OfflineDispatch &dispatch) {
   accounting_ = OfflineAccounting();
   if (options.bag_path.empty() || options.lidar_topic.empty() ||
-      options.imu_topic.empty() || !dispatch.on_imu || !dispatch.step) {
+      options.imu_topic.empty() || !dispatch.on_imu || !dispatch.step ||
+      (!options.image_topic.empty() && !dispatch.on_image)) {
     std::printf("[Prob-LIVO OfflineReader] ERROR: invalid options/dispatch\n");
     return false;
   }
@@ -49,9 +50,9 @@ bool OfflineReader::run(const OfflineOptions &options,
 
   rosbag::View view;
   try {
-    view.addQuery(bag, rosbag::TopicQuery(
-                            std::vector<std::string>{options.lidar_topic,
-                                                     options.imu_topic}));
+    std::vector<std::string> topics{options.lidar_topic, options.imu_topic};
+    if (!options.image_topic.empty()) topics.push_back(options.image_topic);
+    view.addQuery(bag, rosbag::TopicQuery(topics));
   } catch (const std::exception &error) {
     std::printf("[Prob-LIVO OfflineReader] ERROR: view query failed: %s\n",
                 error.what());
@@ -87,6 +88,18 @@ bool OfflineReader::run(const OfflineOptions &options,
         ++accounting_.imu_read;
         RecordSensorTime(*message, accounting_);
         dispatch.on_imu(message);
+        dispatch.step();
+        continue;
+      }
+    }
+
+    if (!options.image_topic.empty() && topic == options.image_topic &&
+        datatype == "sensor_msgs/Image") {
+      const auto message = instance.instantiate<sensor_msgs::Image>();
+      if (message) {
+        ++accounting_.image_read;
+        RecordSensorTime(*message, accounting_);
+        dispatch.on_image(message);
         dispatch.step();
         continue;
       }
@@ -129,10 +142,11 @@ bool OfflineReader::run(const OfflineOptions &options,
   bag.close();
 
   std::printf(
-      "[Prob-LIVO OfflineReader] view %.3fs..%.3fs lidar=%zu imu=%zu "
+      "[Prob-LIVO OfflineReader] view %.3fs..%.3fs lidar=%zu imu=%zu image=%zu "
       "other=%zu wall=%.3fs sensor=%.3fs speed=%.3fx\n",
       view_begin, view_end, accounting_.lidar_read, accounting_.imu_read,
-      accounting_.other_messages, accounting_.wall_processing_s,
+      accounting_.image_read, accounting_.other_messages,
+      accounting_.wall_processing_s,
       accounting_.sensor_duration_s, accounting_.speed_factor);
   return true;
 }

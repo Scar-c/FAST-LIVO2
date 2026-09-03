@@ -121,7 +121,12 @@ include_directories(
 )
 
 # Add libraries
-add_library(vio src/vio.cpp src/frame.cpp src/visual_point.cpp)
+add_library(vio
+  src/vio.cpp
+  src/frame.cpp
+  src/visual_point.cpp
+  src/prob_livo/visual_plane_gate.cpp
+)
 add_library(lio src/voxel_map.cpp)
 add_library(pre src/preprocess.cpp)
 add_library(imu_proc src/IMU_Processing.cpp)
@@ -311,6 +316,26 @@ target_link_libraries(prob_livo_i5_tests
   ${Sophus_LIBRARIES}
   ${Boost_LIBRARIES}
   ${TBB_LIBRARY}
+  ${OpenMP_CXX_FLAGS}
+)
+
+# I6 visual gate policy oracle.  The test is intentionally independent of
+# FAST's large VIO object graph so both camera-on online and offline paths can
+# call the same policy without duplicating the source inequalities.
+add_executable(prob_livo_i6_visual_gate_tests
+  tests/prob_livo/test_i6_visual_plane_gate.cpp
+)
+target_include_directories(prob_livo_i6_visual_gate_tests PRIVATE
+  tests/prob_livo
+)
+target_link_libraries(prob_livo_i6_visual_gate_tests
+  vio
+  lio
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Sophus_LIBRARIES}
+  ${Boost_LIBRARIES}
   ${OpenMP_CXX_FLAGS}
 )
 

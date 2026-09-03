@@ -31,6 +31,7 @@ public:
   Vector3d previous_normal_;    //!< Last updated normal vector.
   list<Feature *> obs_;         //!< Reference patches which observe the point.
   Eigen::Matrix3d covariance_;  //!< Covariance of the point.
+  bool covariance_valid_;       //!< True only when the source supplied covariance.
   bool is_converged_;           //!< True if the point is converged.
   bool is_normal_initialized_;  //!< True if the normal is initialized.
   bool has_ref_patch_;          //!< True if the point has a reference patch.

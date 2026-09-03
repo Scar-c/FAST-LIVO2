@@ -349,7 +349,10 @@ double VIOManager::calculateNCC(float *ref_patch, float *cur_patch, int patch_si
   return numerator / sqrt(demoniator1 * demoniator2 + 1e-10);
 }
 
-void VIOManager::retrieveFromVisualSparseMap(cv::Mat img, vector<pointWithVar> &pg, const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &plane_map)
+void VIOManager::retrieveFromVisualSparseMap(
+    cv::Mat img, vector<pointWithVar> &pg,
+    const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &plane_map,
+    const VisualPlaneQuery *plane_query)
 {
   if (feat_map.size() <= 0) return;
   double ts0 = omp_get_wtime();
@@ -565,6 +568,29 @@ void VIOManager::retrieveFromVisualSparseMap(cv::Mat img, vector<pointWithVar> &
 
           if (voxel_in_fov) sub_feat_map[sample_pos] = 0;
           break;
+        }
+        else if (plane_query != nullptr)
+        {
+          VisualPlaneQueryResult query_result;
+          std::string query_error;
+          ++visual_counters_.plane_queries;
+          const bool query_ok = (*plane_query)(sample_point_w, query_result,
+                                               query_error);
+          if (query_ok && query_result.geometry_valid)
+          {
+            ++visual_counters_.plane_geometry_valid;
+            if (query_result.uncertainty_valid)
+              ++visual_counters_.plane_uncertainty_valid;
+            pointWithVar plane_center;
+            plane_center.point_w = query_result.center_W;
+            plane_center.normal = query_result.normal_W;
+            // Ray-cast geometry is sufficient for FAST's point creation, but
+            // it does not carry a point covariance.  A therefore rejects it
+            // at the uncertainty gate instead of inventing one.
+            plane_center.var.setZero();
+            visual_submap->add_from_voxel_map.push_back(plane_center);
+            break;
+          }
         }
         else
         {
@@ -885,6 +911,8 @@ void VIOManager::generateVisualMapPoints(cv::Mat img, vector<pointWithVar> &pg)
 
       pt_new->addFrameRef(ftr_new);
       pt_new->covariance_ = pt_var.var;
+      pt_new->covariance_valid_ =
+          prob_livo::IsFinitePositiveSemidefinite(Eigen::MatrixXd(pt_var.var));
       pt_new->is_normal_initialized_ = true;
 
       if (cos_theta < 0) { pt_new->normal_ = -pt_var.normal; }
@@ -893,6 +921,7 @@ void VIOManager::generateVisualMapPoints(cv::Mat img, vector<pointWithVar> &pg)
       pt_new->previous_normal_ = pt_new->normal_;
 
       insertPointIntoVoxelMap(pt_new);
+      ++visual_counters_.visual_points_created;
       add += 1;
       // map_cur_frame.push_back(pt_new);
     }
@@ -975,7 +1004,10 @@ void VIOManager::updateVisualMapPoints(cv::Mat img)
   printf("[ VIO ] Update %d points in visual submap\n", update_num);
 }
 
-void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &plane_map)
+void VIOManager::updateReferencePatch(
+    const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &plane_map,
+    const VisualPlaneQuery *plane_query,
+    prob_livo::VisualPlaneGateMode gate_mode)
 {
   if (total_points == 0) return;
 
@@ -989,6 +1021,67 @@ void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelO
     if (update_flag[i] == 0) continue;
 
     const V3D &p_w = pt->pos_;
+    if (plane_query != nullptr)
+    {
+      ++visual_counters_.reference_patch_update_attempts;
+      VisualPlaneQueryResult query_result;
+      std::string query_error;
+      ++visual_counters_.plane_queries;
+      const bool query_ok = (*plane_query)(p_w, query_result, query_error);
+      if (query_ok && query_result.geometry_valid)
+      {
+        ++visual_counters_.plane_geometry_valid;
+        if (query_result.uncertainty_valid)
+          ++visual_counters_.plane_uncertainty_valid;
+
+        const double residual = query_result.normal_W.dot(p_w) +
+                                query_result.d;
+        const double radial_squared =
+            (p_w - query_result.center_W).squaredNorm() - residual * residual;
+        prob_livo::VisualPlaneGateInput gate_input;
+        gate_input.geometry_valid = true;
+        gate_input.uncertainty_valid =
+            query_result.uncertainty_valid && pt->covariance_valid_;
+        gate_input.residual = residual;
+        gate_input.sensor_range = prob_livo::WorldToLidarRange(
+            p_w, state->rot_end, state->pos_end, Rli.transpose(),
+            -Rli.transpose() * Pli);
+        gate_input.radial_distance =
+            radial_squared >= 0.0 ? std::sqrt(radial_squared)
+                                  : std::numeric_limits<double>::quiet_NaN();
+        gate_input.plane_radius = query_result.radius;
+        gate_input.normal = query_result.normal_W;
+        gate_input.point_covariance = pt->covariance_;
+        gate_input.plane_covariance = query_result.plane_covariance_nd;
+
+        const prob_livo::VisualPlaneGateDecision decision =
+            prob_livo::EvaluateVisualPlaneGate(gate_input, gate_mode);
+        if (decision.radius_gate_pass)
+          ++visual_counters_.radius_gate_pass;
+        else
+          ++visual_counters_.radius_gate_reject;
+        if (decision.second_gate_pass)
+          ++visual_counters_.second_gate_pass;
+        else
+          ++visual_counters_.second_gate_reject;
+
+        if (decision.second_gate_pass)
+        {
+          ++visual_counters_.reference_patch_updates_accepted;
+          if (pt->previous_normal_.dot(query_result.normal_W) < 0)
+            pt->normal_ = -query_result.normal_W;
+          else
+            pt->normal_ = query_result.normal_W;
+          const double normal_update =
+              (pt->normal_ - pt->previous_normal_).norm();
+          pt->previous_normal_ = pt->normal_;
+          if (normal_update < 0.0001 && pt->obs_.size() > 10)
+            pt->is_converged_ = true;
+        }
+      }
+    }
+    else
+    {
     float loc_xyz[3];
     for (int j = 0; j < 3; j++)
     {
@@ -1040,6 +1133,7 @@ void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelO
           }
         }
       }
+    }
     }
 
     float score_max = -1000.;
@@ -1517,6 +1611,7 @@ void VIOManager::updateStateInverse(cv::Mat img, int level)
     else
     {
       (*state) = old_state;
+      ++visual_counters_.visual_rollbacks;
       EKF_end = true;
     }
 
@@ -1686,6 +1781,7 @@ void VIOManager::updateState(cv::Mat img, int level)
     else
     {
       (*state) = old_state;
+      ++visual_counters_.visual_rollbacks;
       EKF_end = true;
     }
 
@@ -1794,6 +1890,13 @@ void VIOManager::dumpDataForColmap()
 
 void VIOManager::processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &feat_map, double img_time)
 {
+  ++visual_counters_.visual_process_calls;
+  visual_counters_.current_scan_candidates = pg.size();
+  visual_counters_.current_scan_normal_valid = 0;
+  for (const pointWithVar &point : pg)
+    if (point.normal != V3D(0, 0, 0))
+      ++visual_counters_.current_scan_normal_valid;
+
   if (width != img.cols || height != img.rows)
   {
     if (img.empty()) printf("[ VIO ] Empty Image!\n");
@@ -1812,11 +1915,18 @@ void VIOManager::processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unor
 
   double t1 = omp_get_wtime();
 
-  retrieveFromVisualSparseMap(img, pg, feat_map);
+  const VisualPlaneQuery *plane_query = active_visual_plane_query_;
+  retrieveFromVisualSparseMap(img, pg, feat_map, plane_query);
 
   double t2 = omp_get_wtime();
 
+  if (total_points > 0) ++visual_counters_.photometric_update_attempts;
   computeJacobianAndUpdateEKF(img);
+  if (total_points > 0)
+  {
+    ++visual_counters_.photometric_update_accepted;
+    ++visual_counters_.visual_state_commits;
+  }
 
   double t3 = omp_get_wtime();
 
@@ -1826,7 +1936,7 @@ void VIOManager::processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unor
   
   plotTrackedPoints();
 
-  if (plot_flag) projectPatchFromRefToCur(feat_map);
+  if (plot_flag && plane_query == nullptr) projectPatchFromRefToCur(feat_map);
 
   double t5 = omp_get_wtime();
 
@@ -1834,7 +1944,7 @@ void VIOManager::processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unor
 
   double t6 = omp_get_wtime();
 
-  updateReferencePatch(feat_map);
+  updateReferencePatch(feat_map, plane_query, active_visual_gate_mode_);
 
   double t7 = omp_get_wtime();
   
@@ -1882,4 +1992,16 @@ void VIOManager::processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unor
   // origin.y = 20;
   // cv::putText(img_cp, text, origin, cv::FONT_HERSHEY_COMPLEX, 0.6, cv::Scalar(255, 255, 255), 1, 8, 0);
   // cv::imwrite("/home/chunran/Desktop/raycasting/" + std::to_string(new_frame_->id_) + ".png", img_cp);
+}
+
+void VIOManager::processFrame(cv::Mat &img, vector<pointWithVar> &pg,
+                              const VisualPlaneQuery &plane_query,
+                              prob_livo::VisualPlaneGateMode gate_mode,
+                              double img_time)
+{
+  static const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> kEmptyPlaneMap;
+  active_visual_plane_query_ = &plane_query;
+  active_visual_gate_mode_ = gate_mode;
+  processFrame(img, pg, kEmptyPlaneMap, img_time);
+  active_visual_plane_query_ = nullptr;
 }

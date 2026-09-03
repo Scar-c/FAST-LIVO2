@@ -15,9 +15,13 @@ which is included as part of this source code package.
 
 #include "voxel_map.h"
 #include "feature.h"
+#include "prob_livo/visual_plane_gate.h"
 #include <opencv2/imgproc/imgproc_c.h>
 #include <pcl/filters/voxel_grid.h>
+#include <cstddef>
+#include <functional>
 #include <set>
+#include <string>
 #include <vikit/math_utils.h>
 #include <vikit/robust_cost.h>
 #include <vikit/vision.h>
@@ -80,6 +84,43 @@ public:
   }
 };
 
+struct VisualPlaneQueryResult
+{
+  bool geometry_valid = false;
+  bool uncertainty_valid = false;
+  V3D normal_W = V3D::Zero();
+  double d = 0.0;
+  V3D center_W = V3D::Zero();
+  double radius = 0.0;
+  Eigen::Matrix4d plane_covariance_nd = Eigen::Matrix4d::Zero();
+};
+
+using VisualPlaneQuery = std::function<bool(
+    const V3D &, VisualPlaneQueryResult &, std::string &)>;
+
+struct VisualRuntimeCounters
+{
+  std::size_t camera_epochs = 0;
+  std::size_t images_received = 0;
+  std::size_t visual_process_calls = 0;
+  std::size_t current_scan_candidates = 0;
+  std::size_t current_scan_normal_valid = 0;
+  std::size_t plane_queries = 0;
+  std::size_t plane_geometry_valid = 0;
+  std::size_t plane_uncertainty_valid = 0;
+  std::size_t radius_gate_pass = 0;
+  std::size_t radius_gate_reject = 0;
+  std::size_t second_gate_pass = 0;
+  std::size_t second_gate_reject = 0;
+  std::size_t visual_points_created = 0;
+  std::size_t reference_patch_update_attempts = 0;
+  std::size_t reference_patch_updates_accepted = 0;
+  std::size_t photometric_update_attempts = 0;
+  std::size_t photometric_update_accepted = 0;
+  std::size_t visual_state_commits = 0;
+  std::size_t visual_rollbacks = 0;
+};
+
 class VIOManager
 {
 public:
@@ -130,6 +171,10 @@ public:
   vector<pointWithVar> append_voxel_points;
   FramePtr new_frame_;
   cv::Mat img_cp, img_rgb, img_test;
+  VisualRuntimeCounters visual_counters_;
+  const VisualPlaneQuery *active_visual_plane_query_ = nullptr;
+  prob_livo::VisualPlaneGateMode active_visual_gate_mode_ =
+      prob_livo::VisualPlaneGateMode::kSuperLegacy;
 
   enum CellType
   {
@@ -143,7 +188,14 @@ public:
   void updateStateInverse(cv::Mat img, int level);
   void updateState(cv::Mat img, int level);
   void processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &feat_map, double img_time);
-  void retrieveFromVisualSparseMap(cv::Mat img, vector<pointWithVar> &pg, const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &plane_map);
+  void processFrame(cv::Mat &img, vector<pointWithVar> &pg,
+                    const VisualPlaneQuery &plane_query,
+                    prob_livo::VisualPlaneGateMode gate_mode,
+                    double img_time);
+  void retrieveFromVisualSparseMap(
+      cv::Mat img, vector<pointWithVar> &pg,
+      const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &plane_map,
+      const VisualPlaneQuery *plane_query = nullptr);
   void generateVisualMapPoints(cv::Mat img, vector<pointWithVar> &pg);
   void setImuToLidarExtrinsic(const V3D &transl, const M3D &rot);
   void setLidarToCameraExtrinsic(vector<double> &R, vector<double> &P);
@@ -164,12 +216,25 @@ public:
   void plotTrackedPoints();
   void updateFrameState(StatesGroup state);
   void projectPatchFromRefToCur(const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &plane_map);
-  void updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &plane_map);
+  void updateReferencePatch(
+      const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &plane_map,
+      const VisualPlaneQuery *plane_query = nullptr,
+      prob_livo::VisualPlaneGateMode gate_mode =
+          prob_livo::VisualPlaneGateMode::kSuperLegacy);
   void precomputeReferencePatches(int level);
   void dumpDataForColmap();
   double calculateNCC(float *ref_patch, float *cur_patch, int patch_size);
   int getBestSearchLevel(const Matrix2d &A_cur_ref, const int max_level);
   V3F getInterpolatedPixel(cv::Mat img, V2D pc);
+  void recordImageReceived()
+  {
+    ++visual_counters_.images_received;
+    ++visual_counters_.camera_epochs;
+  }
+  const VisualRuntimeCounters &visual_counters() const
+  {
+    return visual_counters_;
+  }
   
   // void resetRvizDisplay();
   // deque<VisualPoint *> map_cur_frame;

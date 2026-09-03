@@ -51,6 +51,45 @@ LIVMapper::LIVMapper(ros::NodeHandle &nh)
 LIVMapper::~LIVMapper() {
   if (prob_livo_backend_) {
     prob_livo_backend_->RecordSchedulerPendingLidar(lid_raw_data_buffer.size());
+    if (!prob_livo_trajectory_path_.empty() && vio_manager) {
+      const VisualRuntimeCounters &counters = vio_manager->visual_counters();
+      std::ofstream output(prob_livo_trajectory_path_ +
+                                ".visual_counters.yaml",
+                            std::ios::out | std::ios::trunc);
+      if (output.is_open()) {
+        output << "schema_version: 1\n"
+               << "camera_epochs: " << counters.camera_epochs << "\n"
+               << "images_received: " << counters.images_received << "\n"
+               << "visual_process_calls: " << counters.visual_process_calls
+               << "\n"
+               << "current_scan_candidates: "
+               << counters.current_scan_candidates << "\n"
+               << "current_scan_normal_valid: "
+               << counters.current_scan_normal_valid << "\n"
+               << "plane_queries: " << counters.plane_queries << "\n"
+               << "plane_geometry_valid: " << counters.plane_geometry_valid
+               << "\n"
+               << "plane_uncertainty_valid: "
+               << counters.plane_uncertainty_valid << "\n"
+               << "radius_gate_pass: " << counters.radius_gate_pass << "\n"
+               << "radius_gate_reject: " << counters.radius_gate_reject << "\n"
+               << "second_gate_pass: " << counters.second_gate_pass << "\n"
+               << "second_gate_reject: " << counters.second_gate_reject << "\n"
+               << "visual_points_created: " << counters.visual_points_created
+               << "\n"
+               << "reference_patch_update_attempts: "
+               << counters.reference_patch_update_attempts << "\n"
+               << "reference_patch_updates_accepted: "
+               << counters.reference_patch_updates_accepted << "\n"
+               << "photometric_update_attempts: "
+               << counters.photometric_update_attempts << "\n"
+               << "photometric_update_accepted: "
+               << counters.photometric_update_accepted << "\n"
+               << "visual_state_commits: " << counters.visual_state_commits
+               << "\n"
+               << "visual_rollbacks: " << counters.visual_rollbacks << "\n";
+      }
+    }
   }
 }
 
@@ -63,6 +102,8 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
   nh.param<int>("common/lidar_en", lidar_en, 1);
   nh.param<string>("common/img_topic", img_topic, "/left_camera/image");
   nh.param<bool>("common/prob_livo_backend", prob_livo_backend_enabled_, false);
+  nh.param<bool>("common/prob_livo_camera_vio", prob_livo_camera_vio_enabled_,
+                 false);
   nh.param<string>("common/prob_livo_trajectory_path",
                   prob_livo_trajectory_path_, "");
   std::string input_semantics_name;
@@ -78,6 +119,22 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
                    150.0);
   nh.param<int>("prob_livo/super_filter_rate", prob_livo_super_filter_rate_,
                 3);
+  nh.param<string>("prob_livo/visual_plane_gate", prob_livo_visual_gate_name_,
+                   "livo2_prob_3sigma");
+  if (prob_livo_visual_gate_name_ == "livo2_prob_3sigma")
+  {
+    prob_livo_visual_gate_mode_ =
+        prob_livo::VisualPlaneGateMode::kLivo2Prob3sigma;
+  }
+  else if (prob_livo_visual_gate_name_ == "super_legacy")
+  {
+    prob_livo_visual_gate_mode_ = prob_livo::VisualPlaneGateMode::kSuperLegacy;
+  }
+  else
+  {
+    throw std::runtime_error("unknown prob_livo/visual_plane_gate: " +
+                             prob_livo_visual_gate_name_);
+  }
   if (prob_livo_super_blind_ <= 0.0 ||
       prob_livo_super_maxrange_ <= prob_livo_super_blind_ ||
       prob_livo_super_filter_rate_ <= 0) {
@@ -194,8 +251,8 @@ void LIVMapper::initializeComponents()
 
   if (prob_livo_backend_enabled_)
   {
-    if (slam_mode_ != ONLY_LIO)
-      throw std::runtime_error("Prob-LIO backend requires camera-OFF ONLY_LIO mode");
+    if (slam_mode_ != ONLY_LIO && slam_mode_ != LIVO)
+      throw std::runtime_error("Prob-LIO backend requires LiDAR and IMU");
     prob_livo::ProbLioBackend::Options options;
     options.gravity_norm = 9.7946;
     options.imu_gyro_variance = 0.1;
@@ -210,6 +267,7 @@ void LIVMapper::initializeComponents()
     options.lidar_to_imu_translation = extT;
     options.legacy_super_timing =
         prob_livo_input_semantics_ == prob_livo::InputSemantics::kSuperNtuLegacy;
+    options.defer_trajectory_until_camera_epoch = slam_mode_ == LIVO;
     options.trajectory_path = prob_livo_trajectory_path_;
     prob_livo_backend_.reset(new prob_livo::ProbLioBackend(_state, options));
   }
@@ -323,7 +381,18 @@ void LIVMapper::stateEstimationAndMapping()
 {
   if (prob_livo_backend_enabled_)
   {
-    if (prob_livo_backend_->ProcessEpoch(LidarMeasures)) handleProbLio();
+    if (slam_mode_ == LIVO && LidarMeasures.lio_vio_flg == VIO)
+    {
+      handleProbVio();
+    }
+    else
+    {
+      const prob_livo::SchedulerMode mode =
+          slam_mode_ == LIVO ? prob_livo::SchedulerMode::kLivo
+                             : prob_livo::SchedulerMode::kOnlyLio;
+      if (prob_livo_backend_->ProcessEpoch(LidarMeasures, mode))
+        handleProbLio();
+    }
     return;
   }
   switch (LidarMeasures.lio_vio_flg) 
@@ -357,6 +426,47 @@ void LIVMapper::handleProbLio()
   publish_path(pubPath);
   publish_mavros(mavros_pose_publisher);
   ++frame_num;
+}
+
+void LIVMapper::handleProbVio()
+{
+  if (prob_livo_backend_->lifecycle_state() != prob_livo::ProbLioLifecycle::RUN)
+    return;
+
+  _state = prob_livo_backend_->state();
+  state_propagat = _state;
+  feats_undistort = prob_livo_backend_->undistorted_scan();
+  _pv_list = prob_livo_backend_->current_scan_point_with_var();
+
+  const double visual_timestamp = LidarMeasures.measures.back().vio_time;
+  if (prob_livo_camera_vio_enabled_)
+  {
+    const VisualPlaneQuery plane_query =
+        [this](const V3D &point_W, VisualPlaneQueryResult &output,
+               std::string &error) {
+          prob_livo::ProbPlaneQueryResult result;
+          const bool ok = prob_livo_backend_->plane_provider().QueryAtWorldPoint(
+              point_W, result, error);
+          output.geometry_valid = ok && result.valid;
+          output.uncertainty_valid = output.geometry_valid &&
+                                     result.plane_cov_nd.allFinite();
+          output.normal_W = result.normal_W;
+          output.d = result.d;
+          output.center_W = result.center_W;
+          output.radius = result.radius;
+          output.plane_covariance_nd = result.plane_cov_nd;
+          return ok;
+        };
+    vio_manager->plot_flag = false;
+    vio_manager->processFrame(LidarMeasures.measures.back().img, _pv_list,
+                              plane_query, prob_livo_visual_gate_mode_,
+                              visual_timestamp - _first_lidar_time);
+  }
+
+  // In LIVO, the backend's LIO posterior is completed by the immediately
+  // following camera epoch.  H0 calls this with visual state disabled, while
+  // H1/H2 call it after FAST's visual update on the same shared state.
+  prob_livo_backend_->FinalizeCameraEpoch(visual_timestamp);
 }
 
 void LIVMapper::handleVIO() 
@@ -965,6 +1075,7 @@ void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
     return;
   }
 
+  if (vio_manager) vio_manager->recordImageReceived();
   cv::Mat img_cur = getImageFromMsg(msg);
   img_buffer.push_back(img_cur);
   img_time_buffer.push_back(img_time_correct);

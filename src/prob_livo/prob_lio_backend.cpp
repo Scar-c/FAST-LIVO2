@@ -125,7 +125,8 @@ ProbLioBackend::~ProbLioBackend() {
   if (trajectory_.is_open()) trajectory_.close();
 }
 
-bool ProbLioBackend::ProcessEpoch(LidarMeasureGroup &measures) {
+bool ProbLioBackend::ProcessEpoch(LidarMeasureGroup &measures,
+                                  SchedulerMode mode) {
   ++counters_.backend_epochs_attempted;
   last_error_.clear();
   const auto reject = [this](const std::string &message) {
@@ -133,8 +134,9 @@ bool ProbLioBackend::ProcessEpoch(LidarMeasureGroup &measures) {
     ++counters_.backend_epochs_rejected;
     return false;
   };
+  const bool livo_mode = mode == SchedulerMode::kLivo;
   if (measures.measures.empty() || measures.pcl_proc_cur == nullptr ||
-      measures.lidar == nullptr) {
+      (!livo_mode && measures.lidar == nullptr)) {
     return reject("Prob-LIO scheduler packet is incomplete");
   }
   const double epoch_end = measures.measures.back().lio_time;
@@ -156,13 +158,13 @@ bool ProbLioBackend::ProcessEpoch(LidarMeasureGroup &measures) {
   bool success = false;
   switch (lifecycle_.lifecycle()) {
     case ProbLioLifecycle::IMU_INIT:
-      success = ProcessImuInit(measures, epoch_end);
+      success = ProcessImuInit(measures, epoch_end, mode);
       break;
     case ProbLioLifecycle::MAP_INIT:
-      success = ProcessMapInit(measures, epoch_end);
+      success = ProcessMapInit(measures, epoch_end, mode);
       break;
     case ProbLioLifecycle::RUN:
-      success = ProcessRun(measures, epoch_end);
+      success = ProcessRun(measures, epoch_end, mode);
       break;
     default:
       return reject("unknown Prob-LIO lifecycle state");
@@ -176,9 +178,9 @@ bool ProbLioBackend::ProcessEpoch(LidarMeasureGroup &measures) {
 }
 
 bool ProbLioBackend::ProcessImuInit(LidarMeasureGroup &measures,
-                                    double epoch_end) {
+                                    double epoch_end, SchedulerMode mode) {
   const ProbImuAdapter::Result result = imu_adapter_.ProcessLioEpoch(
-      measures, filter_, SchedulerMode::kOnlyLio);
+      measures, filter_, mode);
   if (!result.success) {
     SetError(result.message);
     return false;
@@ -197,8 +199,10 @@ bool ProbLioBackend::ProcessImuInit(LidarMeasureGroup &measures,
 }
 
 bool ProbLioBackend::ProcessMapInit(LidarMeasureGroup &measures,
-                                    double epoch_end) {
-  if (!InsertInitialMap(*measures.lidar)) return false;
+                                    double epoch_end, SchedulerMode mode) {
+  const PointCloudXYZI::Ptr &map_scan =
+      mode == SchedulerMode::kLivo ? measures.pcl_proc_cur : measures.lidar;
+  if (map_scan == nullptr || !InsertInitialMap(*map_scan)) return false;
   // Super map_init() advances last_obs_time without propagating the filter.
   // The first RUN epoch then bridges from this boundary with accepted IMU.
   filter_.SetLastObservationTime(epoch_end);
@@ -222,7 +226,8 @@ bool ProbLioBackend::ConvertLookahead(
   return ToImuSample(message, sample);
 }
 
-bool ProbLioBackend::ProcessRun(LidarMeasureGroup &measures, double epoch_end) {
+bool ProbLioBackend::ProcessRun(LidarMeasureGroup &measures, double epoch_end,
+                                SchedulerMode mode) {
   ImuSample lookahead;
   const ImuSample *lookahead_ptr = nullptr;
   if (measures.imu_lookahead != nullptr && !options_.legacy_super_timing) {
@@ -234,7 +239,7 @@ bool ProbLioBackend::ProcessRun(LidarMeasureGroup &measures, double epoch_end) {
   }
 
   const ProbImuAdapter::Result result = imu_adapter_.ProcessLioEpoch(
-      measures, filter_, SchedulerMode::kOnlyLio, lookahead_ptr);
+      measures, filter_, mode, lookahead_ptr);
   if (!result.success) {
     SetError(result.message);
     return false;
@@ -264,8 +269,10 @@ bool ProbLioBackend::ProcessRun(LidarMeasureGroup &measures, double epoch_end) {
   }
   ++counters_.successful_epochs;
   ++counters_.run_epochs;
-  AppendTrajectory(options_.legacy_super_timing ? filter_.current_time()
-                                                : epoch_end);
+  if (!options_.defer_trajectory_until_camera_epoch) {
+    AppendTrajectory(options_.legacy_super_timing ? filter_.current_time()
+                                                  : epoch_end);
+  }
   return true;
 }
 

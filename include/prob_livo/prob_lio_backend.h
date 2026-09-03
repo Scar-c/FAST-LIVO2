@@ -49,6 +49,7 @@ class ProbLioBackend {
     LI2Sup::CovValidationMode covariance_validation_mode =
         LI2Sup::CovValidationMode::Light;
     bool legacy_super_timing = false;
+    bool defer_trajectory_until_camera_epoch = false;
     Eigen::Matrix3d lidar_to_imu_rotation = Eigen::Matrix3d::Identity();
     Eigen::Vector3d lidar_to_imu_translation = Eigen::Vector3d::Zero();
     Eigen::Matrix3d lidar_to_robot_yaw = Eigen::Matrix3d::Identity();
@@ -86,7 +87,14 @@ class ProbLioBackend {
   ProbLioBackend(StatesGroup &state, const Options &options);
   ~ProbLioBackend();
 
-  bool ProcessEpoch(LidarMeasureGroup &measures);
+  bool ProcessEpoch(
+      LidarMeasureGroup &measures,
+      SchedulerMode mode = SchedulerMode::kOnlyLio);
+  void FinalizeCameraEpoch(double timestamp)
+  {
+    if (options_.defer_trajectory_until_camera_epoch)
+      AppendTrajectory(timestamp);
+  }
   const ProbLioLifecycleAuthority &lifecycle() const { return lifecycle_; }
   ProbLioLifecycle lifecycle_state() const { return lifecycle_.lifecycle(); }
   const Counters &counters() const { return counters_; }
@@ -117,9 +125,12 @@ class ProbLioBackend {
   double filter_current_time() const { return filter_.current_time(); }
 
  private:
-  bool ProcessImuInit(LidarMeasureGroup &measures, double epoch_end);
-  bool ProcessMapInit(LidarMeasureGroup &measures, double epoch_end);
-  bool ProcessRun(LidarMeasureGroup &measures, double epoch_end);
+  bool ProcessImuInit(LidarMeasureGroup &measures, double epoch_end,
+                      SchedulerMode mode);
+  bool ProcessMapInit(LidarMeasureGroup &measures, double epoch_end,
+                      SchedulerMode mode);
+  bool ProcessRun(LidarMeasureGroup &measures, double epoch_end,
+                  SchedulerMode mode);
   bool ConvertLookahead(const sensor_msgs::Imu::ConstPtr &message,
                         ImuSample &sample) const;
   bool InsertInitialMap(const PointCloudXYZI &raw_scan);
