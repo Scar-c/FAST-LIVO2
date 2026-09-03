@@ -37,12 +37,13 @@ The exact Prompt 3 text is registered at
 The exact Prompt 4 text is registered at
 `prompts/prob_livo/prompt4_super_input_parity_eee01.md`.
 
-Current boundary: I0–I5 are closed/owner-verified; Prompt 9 closes I6 as
-`CLOSED` after correcting the QR-native visual Jacobian, splitting geometry
-and uncertainty validity, removing repeated query eigensolvers, and passing
-the required normal-online/offline exact parity check. The preferred repeated
-regression path is the project-owned offline runner. The I7 downsample
-ablation is cancelled and Super VoxelGridClosest remains frozen.
+Current boundary: I0–I5 are closed/owner-verified; Prompt 9 closed I6's
+camera-on visual path after correcting the QR-native visual Jacobian, splitting
+geometry and uncertainty validity, removing repeated query eigensolvers, and
+passing the required normal-online/offline exact parity check. Prompt 10 then
+closed the bounded dead-helper hygiene pass and the eee_01 native-LIO versus
+Prob-LIO ATE/memory characterization. The I7 downsample ablation is cancelled
+and Super VoxelGridClosest remains frozen.
 
 The complete Prompt 4 report is in
 `spec/prob_livo/PROMPT4_EVIDENCE.md`.
@@ -62,3 +63,7 @@ The exact Prompt 10 text is registered at
 `prompts/prob_livo/prompt10_native_lio_memory.md`. Prompt 10 is a bounded I6
 hygiene and eee_01 characterization task; it must stop after the N0/H0/H0-LIOONLY
 comparison and must not enter LIVO/H1/H2 or I8.
+
+The complete Prompt 10 report is in
+`spec/prob_livo/PROMPT10_EVIDENCE.md`; Prompt 10 is
+`PROMPT10 CHARACTERIZATION CLOSED` and stops for owner review.
