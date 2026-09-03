@@ -14,9 +14,22 @@ RATE="${PROB_LIVO_BAG_RATE:-1.0}"
 CONFIG="$REPO_ROOT/config/NTU_VIRAL.yaml"
 CONFIG_OVERLAY="${PROB_LIVO_CONFIG_OVERLAY:-}"
 INPUT_SEMANTICS="${PROB_LIVO_INPUT_SEMANTICS:-fast_native}"
+CAMERA_MODE="${PROB_LIVO_CAMERA_MODE:-off}"
+VISUAL_GATE="${PROB_LIVO_VISUAL_PLANE_GATE:-livo2_prob_3sigma}"
+CAMERA_CONFIG="${PROB_LIVO_CAMERA_CONFIG:-$REPO_ROOT/config/camera_NTU_VIRAL.yaml}"
+
+case "$CAMERA_MODE" in
+  off|h0|h1|h2) ;;
+  *) echo "ERR: PROB_LIVO_CAMERA_MODE must be off, h0, h1, or h2" >&2; exit 2 ;;
+esac
+case "$VISUAL_GATE" in
+  livo2_prob_3sigma|super_legacy) ;;
+  *) echo "ERR: invalid PROB_LIVO_VISUAL_PLANE_GATE" >&2; exit 2 ;;
+esac
 
 if [[ ! -f "$BAG" || ! -f "$CONFIG" || \
-      ( -n "$CONFIG_OVERLAY" && ! -f "$CONFIG_OVERLAY" ) ]]; then
+      ( -n "$CONFIG_OVERLAY" && ! -f "$CONFIG_OVERLAY" ) || \
+      ( "$CAMERA_MODE" != "off" && ! -f "$CAMERA_CONFIG" ) ]]; then
   echo "ERR: missing bag or config" >&2
   exit 2
 fi
@@ -66,10 +79,21 @@ rosparam load "$CONFIG"
 if [[ -n "$CONFIG_OVERLAY" ]]; then
   rosparam load "$CONFIG_OVERLAY"
 fi
-rosparam set /common/img_en 0
+if [[ "$CAMERA_MODE" == "off" ]]; then
+  rosparam set /common/img_en 0
+else
+  rosparam load "$CAMERA_CONFIG" /laserMapping
+  rosparam set /common/img_en 1
+fi
 rosparam set /common/lidar_en 1
 rosparam set /common/prob_livo_backend true
+if [[ "$CAMERA_MODE" == "h1" || "$CAMERA_MODE" == "h2" ]]; then
+  rosparam set /common/prob_livo_camera_vio true
+else
+  rosparam set /common/prob_livo_camera_vio false
+fi
 rosparam set /common/prob_livo_input_semantics "$INPUT_SEMANTICS"
+rosparam set /prob_livo/visual_plane_gate "$VISUAL_GATE"
 rosparam set /common/prob_livo_trajectory_path "$RUN_DIR/trajectory.tum"
 rosparam set /imu/imu_en true
 rosparam set /evo/pose_output_en false
@@ -90,9 +114,12 @@ rosparam dump "$RUN_DIR/effective_rosparams.yaml"
     echo "config_overlay_sha256: $(sha256sum "$CONFIG_OVERLAY" | cut -d' ' -f1)"
   fi
   echo "backend: ProbLioBackend P0-P4"
-  echo "camera: OFF"
+  echo "camera_mode: $CAMERA_MODE"
+  echo "visual_state: $([[ "$CAMERA_MODE" == "h1" || "$CAMERA_MODE" == "h2" ]] && echo ON || echo OFF)"
+  echo "visual_plane_gate: $VISUAL_GATE"
+  echo "camera_config: $([[ "$CAMERA_MODE" == "off" ]] && echo none || echo "$CAMERA_CONFIG")"
   echo "input_semantics: $INPUT_SEMANTICS"
-  echo "replayed_topics: /imu/imu,/os1_cloud_node1/points"
+  echo "replayed_topics: /imu/imu,/os1_cloud_node1/points$([[ "$CAMERA_MODE" == "off" ]] || echo ,/left/image_raw)"
   echo "bag_rate: $RATE"
   echo "ros_master_uri: $ROS_MASTER_URI"
   echo "effective_rosparams: $RUN_DIR/effective_rosparams.yaml"
@@ -108,8 +135,10 @@ if ! kill -0 "$NODE_PID" 2>/dev/null; then
 fi
 
 RUN_START_EPOCH=$(date +%s)
+TOPICS=(/imu/imu /os1_cloud_node1/points)
+if [[ "$CAMERA_MODE" != "off" ]]; then TOPICS+=(/left/image_raw); fi
 rosbag play "$BAG" --clock --rate "$RATE" --topics \
-  /imu/imu /os1_cloud_node1/points >"$RUN_DIR/play.log" 2>&1
+  "${TOPICS[@]}" >"$RUN_DIR/play.log" 2>&1
 PLAY_RC=$?
 RUN_END_EPOCH=$(date +%s)
 sleep 3
@@ -147,6 +176,7 @@ fi
   echo "play_rc: $PLAY_RC"
   echo "node_rc: $NODE_RC"
   echo "authority_counters: $COUNTERS_PATH"
+  echo "visual_counters: $RUN_DIR/trajectory.tum.visual_counters.yaml"
   echo "counter_rc: $COUNTER_RC"
   echo "ground_truth_rc: $GT_RC"
   echo "evaluation_rc: $EVAL_RC"
