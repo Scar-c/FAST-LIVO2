@@ -45,7 +45,13 @@ ProcessorCount(N)
 message(STATUS "Processor count: ${N}")
 
 # Set the number of cores for multithreading
-if(N GREATER 4)
+set(FAST_LIVO_MP_PROC_NUM "" CACHE STRING
+    "Override native OpenMP worker count for diagnostics (default: host policy)")
+if(FAST_LIVO_MP_PROC_NUM)
+  set(PROC_NUM "${FAST_LIVO_MP_PROC_NUM}")
+  add_definitions(-DMP_EN -DMP_PROC_NUM=${PROC_NUM})
+  message(STATUS "Multithreading override. Cores: ${PROC_NUM}")
+elseif(N GREATER 4)
   math(EXPR PROC_NUM "4")
   add_definitions(-DMP_EN -DMP_PROC_NUM=${PROC_NUM})
   message(STATUS "Multithreading enabled. Cores: ${PROC_NUM}")
