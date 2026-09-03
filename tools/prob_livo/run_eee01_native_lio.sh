@@ -85,7 +85,7 @@ rosparam set /common/lidar_en 1
 rosparam set /imu/imu_en true
 rosparam set /evo/pose_output_en true
 rosparam set /evo/seq_name "$RUN_ID"
-rosparam set /publish/dense_map_en false
+rosparam set /publish/dense_map_en true
 rosparam set /publish/pub_effect_point_en false
 rosparam set /publish/pub_plane_en false
 rosparam set /pcd_save/pcd_save_en false
