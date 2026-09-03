@@ -5,6 +5,9 @@
 set -u
 set -o pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/native_runner_status.sh"
+
 NATIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST_ROOT="${FAST_LIVO_EVAL_ROOT:-/home/lc/super_livo/src/FAST-LIVO2}"
 NATIVE_WS="${FAST_LIVO_NATIVE_WS:-/tmp/prompt11_native_ws}"
@@ -99,18 +102,31 @@ wait "$NODE_PID" 2>/dev/null
 NODE_RC=$?
 NODE_PID=""
 
-if [[ -s "$RUN_DIR/trajectory.tum" && -s "$RUN_DIR/trajectory.tum.counters.yaml" &&
-      "$PLAY_RC" -eq 0 && ( "$NODE_RC" -eq 0 || "$NODE_RC" -eq 130 || "$NODE_RC" -eq 139 ) ]]; then
-  RC=0
-else
-  RC=1
+RUN_STATUS="$(native_runner_classify "$NODE_RC" "$PLAY_RC" \
+  "$RUN_DIR/processing_complete.sentinel")"
+if [[ "$RUN_STATUS" == CLEAN_SUCCESS ||
+      "$RUN_STATUS" == PROCESSING_COMPLETE_WITH_SHUTDOWN_FAULT ]]; then
+  if [[ ! -s "$RUN_DIR/trajectory.tum" ||
+        ! -s "$RUN_DIR/trajectory.tum.counters.yaml" ||
+        ! -s "$RUN_DIR/trajectory.tum.timing.yaml" ||
+        ! -s "$RUN_DIR/trajectory.tum.visual_counters.yaml" ]]; then
+    RUN_STATUS=INCOMPLETE_CRASH
+  fi
+fi
+RC="$(native_runner_exit_code "$RUN_STATUS")"
+NODE_RC_ACCEPTED=0
+if [[ "$RUN_STATUS" == CLEAN_SUCCESS ||
+      "$RUN_STATUS" == PROCESSING_COMPLETE_WITH_SHUTDOWN_FAULT ]]; then
+  NODE_RC_ACCEPTED=1
 fi
 {
   echo "play_rc: $PLAY_RC"
   echo "node_rc: $NODE_RC"
-  echo "node_rc_accepted: $([[ "$NODE_RC" -eq 139 ]] && echo 1 || echo 0)"
+  echo "node_rc_accepted: $NODE_RC_ACCEPTED"
+  echo "run_status: $RUN_STATUS"
   echo "trajectory_rows: $(wc -l < "$RUN_DIR/trajectory.tum" 2>/dev/null || echo 0)"
   echo "trajectory_sha256: $(sha256sum "$RUN_DIR/trajectory.tum" 2>/dev/null | cut -d' ' -f1)"
+  echo "processing_complete_sentinel: $RUN_DIR/processing_complete.sentinel"
   echo "runtime_seconds: $((RUN_END - RUN_START))"
   echo "run_rc: $RC"
 } >>"$RUN_DIR/meta.txt"

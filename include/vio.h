@@ -28,7 +28,8 @@ struct NativeVisualRuntimeCounters
 {
   std::uint64_t visual_points_created = 0;
   std::uint64_t reference_patch_update_attempts = 0;
-  std::uint64_t reference_patch_updates_accepted = 0;
+  std::uint64_t reference_patch_candidate_replacements = 0;
+  std::uint64_t reference_patch_commits = 0;
   std::uint64_t plane_queries = 0;
 };
 

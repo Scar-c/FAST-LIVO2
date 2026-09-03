@@ -1037,6 +1037,8 @@ void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelO
       }
     }
 
+    Feature *previous_ref_patch = pt->ref_patch;
+    const bool previous_has_ref_patch = pt->has_ref_patch_;
     float score_max = -1000.;
     for (auto it = pt->obs_.begin(), ite = pt->obs_.end(); it != ite; ++it)
     {
@@ -1097,8 +1099,17 @@ void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelO
         score_max = score;
         pt->ref_patch = ref_patch_temp;
         pt->has_ref_patch_ = true;
-        runtime_counters_.reference_patch_updates_accepted++;
+        runtime_counters_.reference_patch_candidate_replacements++;
       }
+    }
+
+    if (pt->has_ref_patch_ && pt->ref_patch != nullptr &&
+        (!previous_has_ref_patch || pt->ref_patch != previous_ref_patch))
+    {
+      // Count only the final selected patch for this point, rather than every
+      // intermediate score improvement considered by the selection loop.
+      // Selection itself is intentionally unchanged.
+      runtime_counters_.reference_patch_commits++;
     }
 
   }

@@ -690,8 +690,10 @@ void LIVMapper::writeRuntimeReports(const std::string &output_directory) const
                 << "visual_points_created: " << visual.visual_points_created << "\n"
                 << "reference_patch_update_attempts: "
                 << visual.reference_patch_update_attempts << "\n"
-                << "reference_patch_updates_accepted: "
-                << visual.reference_patch_updates_accepted << "\n"
+                << "reference_patch_candidate_replacements: "
+                << visual.reference_patch_candidate_replacements << "\n"
+                << "reference_patch_commits: "
+                << visual.reference_patch_commits << "\n"
                 << "plane_queries: " << visual.plane_queries << "\n"
                 << "final_visual_map_points: " << final_visual_map_points << "\n";
 
@@ -718,6 +720,31 @@ void LIVMapper::writeRuntimeReports(const std::string &output_directory) const
          << runtime_timing_.estimator_compute_count << "\n";
 }
 
+void LIVMapper::writeProcessingCompleteSentinel(
+    const std::string &output_directory, const std::string &source,
+    bool eof_drained, bool expected_final_epoch_reached) const
+{
+  std::ofstream sentinel(output_directory + "/processing_complete.sentinel");
+  if (!sentinel) {
+    ROS_ERROR("cannot write processing completion sentinel in %s",
+              output_directory.c_str());
+    return;
+  }
+  sentinel << "schema_version: 1\n"
+           << "processing_complete: 1\n"
+           << "source: " << source << "\n"
+           << "eof_drained: " << (eof_drained ? 1 : 0) << "\n"
+           << "trajectory_flushed: 1\n"
+           << "counters_flushed: 1\n"
+           << "expected_final_epoch_reached: "
+           << (expected_final_epoch_reached ? 1 : 0) << "\n"
+           << "trajectory_rows: " << runtime_counters_.trajectory_rows << "\n"
+           << "scheduler_step_calls: "
+           << runtime_counters_.scheduler_step_calls << "\n"
+           << "scheduler_sync_packages: "
+           << runtime_counters_.scheduler_sync_packages << "\n";
+}
+
 void LIVMapper::run() 
 {
   ros::Rate rate(5000);
@@ -727,8 +754,16 @@ void LIVMapper::run()
     if (!ProcessAvailableNativeEpochs()) rate.sleep();
   }
   savePCD();
-  if (!runtime_report_directory_.empty())
+  if (!runtime_report_directory_.empty()) {
     writeRuntimeReports(runtime_report_directory_);
+    const bool expected_final_epoch_reached =
+        runtime_counters_.trajectory_rows > 0 &&
+        runtime_counters_.scheduler_step_calls ==
+            runtime_counters_.scheduler_sync_packages;
+    writeProcessingCompleteSentinel(runtime_report_directory_,
+                                    "online_ros_subscribers", false,
+                                    expected_final_epoch_reached);
+  }
 }
 
 void LIVMapper::prop_imu_once(StatesGroup &imu_prop_state, const double dt, V3D acc_avr, V3D angvel_avr)

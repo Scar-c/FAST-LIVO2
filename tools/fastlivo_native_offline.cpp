@@ -104,7 +104,20 @@ int main(int argc, char **argv)
   mapper.writeRuntimeReports(output_directory);
   WriteOfflineSourceReport(output_directory, reader.accounting(), drain_steps);
 
+  const auto &runtime = mapper.runtime_counters();
   const auto &accounting = reader.accounting();
+  const bool callbacks_drained =
+      accounting.imu_read == runtime.imu_callbacks_received &&
+      accounting.lidar_read == runtime.lidar_callbacks_received &&
+      (mode == "lio" ||
+       accounting.image_read == runtime.image_callbacks_received);
+  const bool expected_final_epoch_reached =
+      callbacks_drained && runtime.trajectory_rows > 0 &&
+      runtime.scheduler_step_calls == runtime.scheduler_sync_packages;
+  mapper.writeProcessingCompleteSentinel(output_directory,
+                                         "offline_rosbag_record_order", true,
+                                         expected_final_epoch_reached);
+
   std::cout << "[fastlivo_native_offline] mode=" << mode
             << " lidar_read=" << accounting.lidar_read
             << " imu_read=" << accounting.imu_read

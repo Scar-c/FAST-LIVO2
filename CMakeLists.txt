@@ -160,6 +160,8 @@ target_link_libraries(native_offline_reader_tests
   ${catkin_LIBRARIES}
 )
 add_test(NAME native_offline_reader_tests COMMAND native_offline_reader_tests)
+add_test(NAME native_runner_status_tests
+  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/native_runner_status_test.sh)
 
 # Link libraries to the executable
 target_link_libraries(fastlivo_mapping

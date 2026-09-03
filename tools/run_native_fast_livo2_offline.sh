@@ -6,6 +6,9 @@
 set -u
 set -o pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/native_runner_status.sh"
+
 NATIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST_ROOT="${FAST_LIVO_EVAL_ROOT:-/home/lc/super_livo/src/FAST-LIVO2}"
 NATIVE_WS="${FAST_LIVO_NATIVE_WS:-/tmp/prompt11_native_ws}"
@@ -75,31 +78,31 @@ RUN_START=$(date +%s)
 rosrun fast_livo fastlivo_native_offline "$BAG" "$RUN_DIR" "$MODE" >"$RUN_DIR/node.log" 2>&1
 NODE_RC=$?
 RUN_END=$(date +%s)
-NODE_RC_ACCEPTED=0
-if [[ "$NODE_RC" -eq 139 && -s "$RUN_DIR/trajectory.tum" &&
-      -s "$RUN_DIR/trajectory.tum.counters.yaml" &&
-      -s "$RUN_DIR/trajectory.tum.timing.yaml" &&
-      -s "$RUN_DIR/trajectory.tum.visual_counters.yaml" &&
-      -s "$RUN_DIR/offline_source.yaml" ]]; then
-  # The native authority already exhibits this shutdown-only SIGSEGV after
-  # complete output (Prompt10 N0).  Accept it only after all terminal reports
-  # exist, so an in-flight estimator crash cannot be hidden.
-  NODE_RC_ACCEPTED=1
+RUN_STATUS="$(native_runner_classify "$NODE_RC" 0 \
+  "$RUN_DIR/processing_complete.sentinel" 1)"
+if [[ "$RUN_STATUS" == CLEAN_SUCCESS ||
+      "$RUN_STATUS" == PROCESSING_COMPLETE_WITH_SHUTDOWN_FAULT ]]; then
+  if [[ ! -s "$RUN_DIR/trajectory.tum" ||
+        ! -s "$RUN_DIR/trajectory.tum.counters.yaml" ||
+        ! -s "$RUN_DIR/trajectory.tum.timing.yaml" ||
+        ! -s "$RUN_DIR/trajectory.tum.visual_counters.yaml" ||
+        ! -s "$RUN_DIR/offline_source.yaml" ]]; then
+    RUN_STATUS=INCOMPLETE_CRASH
+  fi
 fi
-if [[ -s "$RUN_DIR/trajectory.tum" && -s "$RUN_DIR/trajectory.tum.counters.yaml" &&
-      -s "$RUN_DIR/trajectory.tum.timing.yaml" &&
-      -s "$RUN_DIR/trajectory.tum.visual_counters.yaml" &&
-      -s "$RUN_DIR/offline_source.yaml" &&
-      ( "$NODE_RC" -eq 0 || "$NODE_RC_ACCEPTED" -eq 1 ) ]]; then
-  RC=0
-else
-  RC=1
+RC="$(native_runner_exit_code "$RUN_STATUS")"
+NODE_RC_ACCEPTED=0
+if [[ "$RUN_STATUS" == CLEAN_SUCCESS ||
+      "$RUN_STATUS" == PROCESSING_COMPLETE_WITH_SHUTDOWN_FAULT ]]; then
+  NODE_RC_ACCEPTED=1
 fi
 {
   echo "node_rc: $NODE_RC"
   echo "node_rc_accepted: $NODE_RC_ACCEPTED"
+  echo "run_status: $RUN_STATUS"
   echo "trajectory_rows: $(wc -l < "$RUN_DIR/trajectory.tum" 2>/dev/null || echo 0)"
   echo "trajectory_sha256: $(sha256sum "$RUN_DIR/trajectory.tum" 2>/dev/null | cut -d' ' -f1)"
+  echo "processing_complete_sentinel: $RUN_DIR/processing_complete.sentinel"
   echo "runtime_seconds: $((RUN_END - RUN_START))"
   echo "run_rc: $RC"
 } >>"$RUN_DIR/meta.txt"

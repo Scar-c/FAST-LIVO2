@@ -36,6 +36,10 @@ public:
   bool ProcessAvailableNativeEpochs();
   std::size_t DrainAvailableNativeEpochs(std::size_t max_attempts = 100000);
   void writeRuntimeReports(const std::string &output_directory) const;
+  void writeProcessingCompleteSentinel(const std::string &output_directory,
+                                       const std::string &source,
+                                       bool eof_drained,
+                                       bool expected_final_epoch_reached) const;
   const NativeRuntimeCounters &runtime_counters() const { return runtime_counters_; }
   const NativeRuntimeTiming &runtime_timing() const { return runtime_timing_; }
   void gravityAlignment();
