@@ -1655,7 +1655,7 @@ void VIOManager::updateState(cv::Mat img, int level)
   
     #ifdef MP_EN
       omp_set_num_threads(MP_PROC_NUM);
-      #pragma omp parallel for reduction(+:error, n_meas)
+      #pragma omp parallel for
     #endif
     for (int i = 0; i < total_points; i++)
     {
@@ -1727,16 +1727,24 @@ void VIOManager::updateState(cv::Mat img, int level)
           z(i * patch_size_total + x * patch_size + y) = res;
 
           patch_error += res * res;
-          n_meas += 1;
-          
           if (exposure_estimate_en) { H_sub.block<1, 7>(i * patch_size_total + x * patch_size + y, 0) << JdR, Jdt, cur_value; }
           else { H_sub.block<1, 6>(i * patch_size_total + x * patch_size + y, 0) << JdR, Jdt; }
         }
       }
       visual_submap->errors[i] = patch_error;
-      error += patch_error;
     }
 
+    // The Jacobian rows are independent and remain OpenMP-parallel.  Reduce
+    // the per-point float errors in point-index order so convergence and
+    // rollback decisions are identical in online and offline replay.
+    error = 0.0f;
+    n_meas = 0;
+    for (int i = 0; i < total_points; ++i)
+    {
+      if (visual_submap->voxel_points[i] == nullptr) continue;
+      error += visual_submap->errors[i];
+      n_meas += patch_size_total;
+    }
     error = error / n_meas;
     
     compute_jacobian_time += omp_get_wtime() - t1;
