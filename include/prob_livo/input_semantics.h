@@ -22,11 +22,6 @@ inline bool ParseInputSemantics(const std::string &name,
   return false;
 }
 
-inline const char *InputSemanticsName(InputSemantics semantics) {
-  return semantics == InputSemantics::kSuperNtuLegacy ?
-      "super_ntu_legacy" : "fast_native";
-}
-
 inline double LidarHeaderTime(InputSemantics semantics, double ros_stamp,
                               double configured_offset) {
   (void)semantics;
