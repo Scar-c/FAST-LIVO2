@@ -334,9 +334,10 @@ void LIVMapper::writeTrajectoryPose(double timestamp)
 bool LIVMapper::ProcessAvailableNativeEpochs()
 {
   const auto begin = NativeClock::now();
-  runtime_counters_.scheduler_step_calls++;
+  runtime_counters_.scheduler_poll_calls++;
   if (!sync_packages(LidarMeasures)) return false;
 
+  runtime_counters_.scheduler_step_calls++;
   runtime_counters_.scheduler_sync_packages++;
   if (LidarMeasures.lio_vio_flg == VIO)
     runtime_counters_.camera_epochs++;
@@ -660,6 +661,8 @@ void LIVMapper::writeRuntimeReports(const std::string &output_directory) const
            << runtime_counters_.ignored_input_messages << "\n"
            << "scheduler_step_calls: "
            << runtime_counters_.scheduler_step_calls << "\n"
+           << "scheduler_poll_calls: "
+           << runtime_counters_.scheduler_poll_calls << "\n"
            << "scheduler_sync_packages: "
            << runtime_counters_.scheduler_sync_packages << "\n"
            << "lidar_epochs: " << runtime_counters_.lidar_epochs << "\n"

@@ -15,7 +15,10 @@ struct NativeRuntimeCounters
   std::uint64_t image_messages_enqueued = 0;
   std::uint64_t ignored_input_messages = 0;
 
+  // A step is a successfully synchronized native epoch.  Poll attempts are
+  // source-specific because online ROS spins also poll empty queues.
   std::uint64_t scheduler_step_calls = 0;
+  std::uint64_t scheduler_poll_calls = 0;
   std::uint64_t scheduler_sync_packages = 0;
   std::uint64_t lidar_epochs = 0;
   std::uint64_t camera_epochs = 0;

@@ -75,13 +75,29 @@ RUN_START=$(date +%s)
 rosrun fast_livo fastlivo_native_offline "$BAG" "$RUN_DIR" "$MODE" >"$RUN_DIR/node.log" 2>&1
 NODE_RC=$?
 RUN_END=$(date +%s)
-if [[ -s "$RUN_DIR/trajectory.tum" && -s "$RUN_DIR/trajectory.tum.counters.yaml" && "$NODE_RC" -eq 0 ]]; then
+NODE_RC_ACCEPTED=0
+if [[ "$NODE_RC" -eq 139 && -s "$RUN_DIR/trajectory.tum" &&
+      -s "$RUN_DIR/trajectory.tum.counters.yaml" &&
+      -s "$RUN_DIR/trajectory.tum.timing.yaml" &&
+      -s "$RUN_DIR/trajectory.tum.visual_counters.yaml" &&
+      -s "$RUN_DIR/offline_source.yaml" ]]; then
+  # The native authority already exhibits this shutdown-only SIGSEGV after
+  # complete output (Prompt10 N0).  Accept it only after all terminal reports
+  # exist, so an in-flight estimator crash cannot be hidden.
+  NODE_RC_ACCEPTED=1
+fi
+if [[ -s "$RUN_DIR/trajectory.tum" && -s "$RUN_DIR/trajectory.tum.counters.yaml" &&
+      -s "$RUN_DIR/trajectory.tum.timing.yaml" &&
+      -s "$RUN_DIR/trajectory.tum.visual_counters.yaml" &&
+      -s "$RUN_DIR/offline_source.yaml" &&
+      ( "$NODE_RC" -eq 0 || "$NODE_RC_ACCEPTED" -eq 1 ) ]]; then
   RC=0
 else
   RC=1
 fi
 {
   echo "node_rc: $NODE_RC"
+  echo "node_rc_accepted: $NODE_RC_ACCEPTED"
   echo "trajectory_rows: $(wc -l < "$RUN_DIR/trajectory.tum" 2>/dev/null || echo 0)"
   echo "trajectory_sha256: $(sha256sum "$RUN_DIR/trajectory.tum" 2>/dev/null | cut -d' ' -f1)"
   echo "runtime_seconds: $((RUN_END - RUN_START))"

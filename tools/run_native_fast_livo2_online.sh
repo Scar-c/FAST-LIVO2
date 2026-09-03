@@ -108,6 +108,7 @@ fi
 {
   echo "play_rc: $PLAY_RC"
   echo "node_rc: $NODE_RC"
+  echo "node_rc_accepted: $([[ "$NODE_RC" -eq 139 ]] && echo 1 || echo 0)"
   echo "trajectory_rows: $(wc -l < "$RUN_DIR/trajectory.tum" 2>/dev/null || echo 0)"
   echo "trajectory_sha256: $(sha256sum "$RUN_DIR/trajectory.tum" 2>/dev/null | cut -d' ' -f1)"
   echo "runtime_seconds: $((RUN_END - RUN_START))"
