@@ -37,4 +37,7 @@ assert_status TIMEOUT 124 0 "$TMP_DIR/complete.sentinel"
 assert_status CANCELLED 130 0 "$TMP_DIR/complete.sentinel"
 assert_status CONTAMINATED 0 2 "$TMP_DIR/complete.sentinel"
 
+[[ "$(native_runner_exit_code CLEAN_SUCCESS)" == 0 ]]
+[[ "$(native_runner_exit_code PROCESSING_COMPLETE_WITH_SHUTDOWN_FAULT)" == 1 ]]
+
 echo "native runner status tests passed"
