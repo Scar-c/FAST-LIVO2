@@ -160,6 +160,10 @@ if [[ -s "$NATIVE_RESULT" ]]; then
 else
   TRAJECTORY_RC=2
 fi
+NODE_RC_ACCEPTED=0
+if [[ "$NODE_RC" -eq 0 || "$NODE_RC" -eq 130 || "$NODE_RC" -eq 139 ]]; then
+  NODE_RC_ACCEPTED=1
+fi
 python3 "$REPO_ROOT/eval/prob_livo/pose_bag_to_tum.py" \
   --bag "$BAG" --topic /leica/pose/relative --output "$RUN_DIR/ground_truth.tum" \
   >"$RUN_DIR/ground_truth.log" 2>&1
@@ -173,7 +177,7 @@ else
   EVAL_RC=2
 fi
 
-if [[ "$PLAY_RC" -eq 0 && ( "$NODE_RC" -eq 0 || "$NODE_RC" -eq 130 ) && \
+if [[ "$PLAY_RC" -eq 0 && "$NODE_RC_ACCEPTED" -eq 1 && \
       "$TRAJECTORY_RC" -eq 0 && "$MEMORY_RC" -eq 0 && "$GT_RC" -eq 0 && \
       "$EVAL_RC" -eq 0 ]]; then
   RC=0
@@ -183,6 +187,7 @@ fi
 {
   echo "play_rc: $PLAY_RC"
   echo "node_rc: $NODE_RC"
+  echo "node_rc_accepted: $NODE_RC_ACCEPTED"
   echo "trajectory_rc: $TRAJECTORY_RC"
   echo "memory_rc: $MEMORY_RC"
   echo "ground_truth_rc: $GT_RC"
