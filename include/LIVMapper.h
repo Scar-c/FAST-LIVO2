@@ -170,6 +170,7 @@ public:
   // lifecycle and Super-native map; LIVMapper remains the ROS shell.
   bool prob_livo_backend_enabled_ = false;
   bool prob_livo_camera_vio_enabled_ = false;
+  bool prob_livo_one_callback_step_ = false;
   bool prob_livo_first_scheduler_epoch_ = true;
   prob_livo::InputSemantics prob_livo_input_semantics_ =
       prob_livo::InputSemantics::kFastNative;

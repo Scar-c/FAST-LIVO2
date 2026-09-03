@@ -87,6 +87,7 @@ else
 fi
 rosparam set /common/lidar_en 1
 rosparam set /common/prob_livo_backend true
+rosparam set /common/prob_livo_one_callback_step true
 if [[ "$CAMERA_MODE" == "h1" || "$CAMERA_MODE" == "h2" ]]; then
   rosparam set /common/prob_livo_camera_vio true
 else
