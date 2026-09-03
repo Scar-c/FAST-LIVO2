@@ -4,6 +4,7 @@
 # launches ROS, replays the bag, samples /proc, and collects the pose file.
 
 set -u
+set -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NATIVE_ROOT="${PROB_LIVO_NATIVE_ROOT:-/tmp/prompt10_fast_livo2_native}"
