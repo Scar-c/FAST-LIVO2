@@ -14,6 +14,7 @@ which is included as part of this source code package.
 #include "prob_livo/prob_imu_adapter.h"
 #include "prob_livo/prob_lio_lifecycle.h"
 #include "prob_livo/prob_lio_backend.h"
+#include <ros/callback_queue.h>
 
 LIVMapper::LIVMapper(ros::NodeHandle &nh)
     : extT(0, 0, 0),
@@ -104,6 +105,8 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
   nh.param<bool>("common/prob_livo_backend", prob_livo_backend_enabled_, false);
   nh.param<bool>("common/prob_livo_camera_vio", prob_livo_camera_vio_enabled_,
                  false);
+  nh.param<bool>("common/prob_livo_one_callback_step",
+                 prob_livo_one_callback_step_, false);
   nh.param<string>("common/prob_livo_trajectory_path",
                   prob_livo_trajectory_path_, "");
   std::string input_semantics_name;
@@ -727,7 +730,10 @@ void LIVMapper::run()
   ros::Rate rate(5000);
   while (ros::ok()) 
   {
-    ros::spinOnce();
+    if (prob_livo_one_callback_step_)
+      ros::getGlobalCallbackQueue()->callOne(ros::WallDuration(0));
+    else
+      ros::spinOnce();
     if (!sync_packages(LidarMeasures)) 
     {
       rate.sleep();
