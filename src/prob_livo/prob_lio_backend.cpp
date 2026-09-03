@@ -244,10 +244,11 @@ bool ProbLioBackend::ProcessRun(LidarMeasureGroup &measures, double epoch_end) {
   if (!BuildAndSolveScan()) return false;
   std::string adapter_error;
   if (!point_with_var_adapter_.Build(
-          static_cast<std::uint64_t>(counters_.run_epochs),
-          *downsampled_scan_, points_body_, body_covariances_, state_.rot_end,
-          state_.pos_end, options_.lidar_to_imu_rotation,
-          options_.lidar_to_imu_translation, adapter_error)) {
+          static_cast<std::uint64_t>(counters_.run_epochs), *downsampled_scan_,
+          points_body_, lidar_covariances_, body_covariances_, state_.rot_end,
+          state_.pos_end, state_.cov, options_.lidar_to_imu_rotation,
+          options_.lidar_to_imu_translation, effect_mask_,
+          plane_coefficients_, adapter_error)) {
     SetError("Prob-LIO pointWithVar adapter failed: " + adapter_error);
     return false;
   }
@@ -334,7 +335,8 @@ bool ProbLioBackend::BuildAndSolveScan() {
     LI2Sup::ComputeBodyCovListWithExtrinsic(
         points_body_, options_.lidar_to_imu_rotation,
         options_.lidar_to_imu_translation, options_.lidar_depth_error,
-        options_.lidar_beam_error_deg, body_covariances_);
+        options_.lidar_beam_error_deg, body_covariances_,
+        &lidar_covariances_);
     for (const auto &covariance : body_covariances_) {
       if (!LI2Sup::ValidateCovariance(
               covariance, options_.covariance_validation_mode,

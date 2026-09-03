@@ -166,8 +166,28 @@ inline void ComputeInitMapCovList(
 inline void ComputeBodyCovListWithExtrinsic(
     const BASIC::VV3 &points_imu, const BASIC::M3d &lidar_to_imu_rotation,
     const BASIC::V3d &lidar_to_imu_translation, double depth_error,
+    double beam_error_deg, std::vector<BASIC::M3d> &covariances_imu,
+    std::vector<BASIC::M3d> *covariances_lidar);
+
+inline void ComputeBodyCovListWithExtrinsic(
+    const BASIC::VV3 &points_imu, const BASIC::M3d &lidar_to_imu_rotation,
+    const BASIC::V3d &lidar_to_imu_translation, double depth_error,
     double beam_error_deg, std::vector<BASIC::M3d> &covariances_imu) {
+  ComputeBodyCovListWithExtrinsic(
+      points_imu, lidar_to_imu_rotation, lidar_to_imu_translation, depth_error,
+      beam_error_deg, covariances_imu,
+      static_cast<std::vector<BASIC::M3d> *>(nullptr));
+}
+
+inline void ComputeBodyCovListWithExtrinsic(
+    const BASIC::VV3 &points_imu, const BASIC::M3d &lidar_to_imu_rotation,
+    const BASIC::V3d &lidar_to_imu_translation, double depth_error,
+    double beam_error_deg, std::vector<BASIC::M3d> &covariances_imu,
+    std::vector<BASIC::M3d> *covariances_lidar) {
   covariances_imu.resize(points_imu.size());
+  if (covariances_lidar != nullptr) {
+    covariances_lidar->resize(points_imu.size());
+  }
   tbb::parallel_for(
       tbb::blocked_range<std::size_t>(0, points_imu.size()),
       [&](const tbb::blocked_range<std::size_t> &range) {
@@ -178,6 +198,9 @@ inline void ComputeBodyCovListWithExtrinsic(
           BASIC::M3d lidar_covariance;
           CalcLidarPointCov(point_lidar, depth_error, beam_error_deg,
                             lidar_covariance);
+          if (covariances_lidar != nullptr) {
+            (*covariances_lidar)[i] = lidar_covariance;
+          }
           covariances_imu[i] = RotateCovariance(lidar_to_imu_rotation,
                                                  lidar_covariance);
         }

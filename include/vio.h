@@ -184,4 +184,10 @@ public:
 };
 typedef std::shared_ptr<VIOManager> VIOManagerPtr;
 
+// Production-used preparation seam for FAST's current visual-map candidate
+// path. A zero plane normal is the native skip condition; accepted candidates
+// carry their world point and full visual covariance unchanged.
+bool PrepareVisualMapCandidate(const pointWithVar &input,
+                               pointWithVar &candidate);
+
 #endif // VIO_H_

@@ -808,9 +808,10 @@ void VIOManager::generateVisualMapPoints(cv::Mat img, vector<pointWithVar> &pg)
   // double t0 = omp_get_wtime();
   for (int i = 0; i < pg.size(); i++)
   {
-    if (pg[i].normal == V3D(0, 0, 0)) continue;
+    pointWithVar candidate;
+    if (!PrepareVisualMapCandidate(pg[i], candidate)) continue;
 
-    V3D pt = pg[i].point_w;
+    V3D pt = candidate.point_w;
     V2D pc(new_frame_->w2c(pt));
 
     if (new_frame_->cam_->isInFrame(pc.cast<int>(), border)) // 20px is the patch size in the matcher
@@ -824,7 +825,7 @@ void VIOManager::generateVisualMapPoints(cv::Mat img, vector<pointWithVar> &pg)
         if (cur_value > scan_value[index])
         {
           scan_value[index] = cur_value;
-          append_voxel_points[index] = pg[i];
+          append_voxel_points[index] = candidate;
           grid_num[index] = TYPE_POINTCLOUD;
         }
       }
@@ -903,6 +904,14 @@ void VIOManager::generateVisualMapPoints(cv::Mat img, vector<pointWithVar> &pg)
   // printf("pg.size: %d \n", pg.size());
   // printf("B1. : %.6lf \n", t_b1);
   // printf("B2. : %.6lf \n", t_b2);
+}
+
+bool PrepareVisualMapCandidate(const pointWithVar &input,
+                               pointWithVar &candidate)
+{
+  if (input.normal == V3D(0, 0, 0)) return false;
+  candidate = input;
+  return true;
 }
 
 void VIOManager::updateVisualMapPoints(cv::Mat img)

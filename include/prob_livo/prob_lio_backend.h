@@ -158,6 +158,7 @@ class ProbLioBackend {
   PointCloudXYZI::Ptr world_scan_{new PointCloudXYZI()};
 
   LI2Sup::VV3 points_body_;
+  std::vector<LI2Sup::M3d> lidar_covariances_;
   std::vector<LI2Sup::M3d> body_covariances_;
   std::vector<LI2Sup::M3d> map_covariances_;
   std::vector<LI2Sup::ProbQrPlane> plane_covariances_;
