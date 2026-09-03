@@ -1,11 +1,13 @@
 #include "prob_livo/prob_lio_backend.h"
 #include "prob_livo/prob_plane_provider.h"
+#include "prob_livo/visual_plane_gate.h"
 #include "test_i3_support.h"
 
 #include <Eigen/Eigenvalues>
 
 #include <chrono>
 #include <cmath>
+#include <limits>
 #include <string>
 
 namespace {
@@ -14,6 +16,8 @@ using Map = LI2Sup::OctVoxMap<LI2Sup::V3, LI2Sup::scalar>;
 using prob_livo::ProbLioBackend;
 using prob_livo::ProbPlaneProvider;
 using prob_livo::ProbPlaneQueryResult;
+using prob_livo::VisualPlaneGateInput;
+using prob_livo::VisualPlaneGateMode;
 using prob_livo_test::MakeBackendEpoch;
 using prob_livo_test::MakePlanePoints;
 using prob_livo_test::TestContext;
@@ -218,6 +222,42 @@ void TestValidityAndReadOnly(TestContext &context) {
                 "provider accepted rank-deficient support");
 }
 
+void TestGeometryUncertaintySplit(TestContext &context) {
+  Map map(Map::Options{0.5f, 1000});
+  const LI2Sup::VV3 points = MakeTiltedSupport();
+  std::vector<Eigen::Matrix3d> invalid_covariances(points.size());
+  for (Eigen::Matrix3d &covariance : invalid_covariances)
+    covariance.setConstant(std::numeric_limits<double>::quiet_NaN());
+  map.insert(points, invalid_covariances);
+
+  const ProbPlaneProvider provider(map);
+  ProbPlaneQueryResult result;
+  std::string error;
+  const bool query_ok = provider.QueryAtWorldPoint(
+      Eigen::Vector3d(0.3, 0.3, 2.03), result, error);
+  context.Check(query_ok && result.geometry_valid && result.valid,
+                "invalid covariance must not invalidate provider geometry");
+  context.Check(!result.uncertainty_valid,
+                "invalid covariance must clear only uncertainty validity");
+
+  VisualPlaneGateInput gate_input;
+  gate_input.geometry_valid = result.geometry_valid;
+  gate_input.uncertainty_valid = result.uncertainty_valid;
+  gate_input.normal = result.normal_W;
+  gate_input.radial_distance = 0.0;
+  gate_input.plane_radius = result.radius;
+  gate_input.residual = 0.01;
+  gate_input.sensor_range = 10.0;
+  const auto probabilistic = prob_livo::EvaluateVisualPlaneGate(
+      gate_input, VisualPlaneGateMode::kLivo2Prob3sigma);
+  const auto legacy = prob_livo::EvaluateVisualPlaneGate(
+      gate_input, VisualPlaneGateMode::kSuperLegacy);
+  context.Check(!probabilistic.second_gate_pass,
+                "H1 must fail closed when provider uncertainty is invalid");
+  context.Check(legacy.radius_gate_pass && legacy.second_gate_pass,
+                "H2 must consume geometry without provider uncertainty");
+}
+
 void TestIntegrationSeamAndPerformance(TestContext &context) {
   StatesGroup state;
   ProbLioBackend::Options options;
@@ -297,6 +337,7 @@ int main() {
   TestContext context;
   TestProviderParityAndCenter(context);
   TestValidityAndReadOnly(context);
+  TestGeometryUncertaintySplit(context);
   TestIntegrationSeamAndPerformance(context);
   context.Print("G-I5 ProbPlaneProvider parity and read-only gates");
   return context.Passed() ? 0 : 1;

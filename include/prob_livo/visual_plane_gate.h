@@ -19,6 +19,7 @@ struct VisualPlaneGateInput {
   double sensor_range = 0.0;
   double radial_distance = 0.0;
   double plane_radius = 0.0;
+  Eigen::Vector3d point_W = Eigen::Vector3d::Zero();
   Eigen::Vector3d normal = Eigen::Vector3d::Zero();
   Eigen::Matrix3d point_covariance = Eigen::Matrix3d::Zero();
   Eigen::Matrix4d plane_covariance = Eigen::Matrix4d::Zero();

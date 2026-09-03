@@ -15,7 +15,11 @@ namespace prob_livo {
 using ProbPlaneMap = LI2Sup::OctVoxMap<LI2Sup::V3, LI2Sup::scalar>;
 
 struct ProbPlaneQueryResult {
+  // Backward-compatible alias for geometry_valid. It must not imply that
+  // the QR covariance is usable; inspect uncertainty_valid separately.
   bool valid = false;
+  bool geometry_valid = false;
+  bool uncertainty_valid = false;
   Eigen::Vector3d normal_W = Eigen::Vector3d::Zero();
   double d = 0.0;
   Eigen::Vector4d coeff_nd = Eigen::Vector4d::Zero();

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Canonical ROS Prob-LIVO runner for Prompt-3 camera-OFF and Prompt-8 H0/H1/H2.
+# Canonical ROS Prob-LIVO runner for Prompt-3 camera-OFF and Prompt-8/9 H0/H1/H2.
 # One FAST scheduler/node and one Prob OctVox backend are used. Every
 # invocation writes a unique, self-describing run.
 
@@ -17,6 +17,7 @@ INPUT_SEMANTICS="${PROB_LIVO_INPUT_SEMANTICS:-fast_native}"
 CAMERA_MODE="${PROB_LIVO_CAMERA_MODE:-off}"
 VISUAL_GATE="${PROB_LIVO_VISUAL_PLANE_GATE:-livo2_prob_3sigma}"
 CAMERA_CONFIG="${PROB_LIVO_CAMERA_CONFIG:-$REPO_ROOT/config/camera_NTU_VIRAL.yaml}"
+ONE_CALLBACK_STEP="${PROB_LIVO_ONE_CALLBACK_STEP:-false}"
 
 case "$CAMERA_MODE" in
   off|h0|h1|h2) ;;
@@ -87,7 +88,7 @@ else
 fi
 rosparam set /common/lidar_en 1
 rosparam set /common/prob_livo_backend true
-rosparam set /common/prob_livo_one_callback_step true
+rosparam set /common/prob_livo_one_callback_step "$ONE_CALLBACK_STEP"
 if [[ "$CAMERA_MODE" == "h1" || "$CAMERA_MODE" == "h2" ]]; then
   rosparam set /common/prob_livo_camera_vio true
 else
@@ -120,6 +121,7 @@ rosparam dump "$RUN_DIR/effective_rosparams.yaml"
   echo "visual_plane_gate: $VISUAL_GATE"
   echo "camera_config: $([[ "$CAMERA_MODE" == "off" ]] && echo none || echo "$CAMERA_CONFIG")"
   echo "input_semantics: $INPUT_SEMANTICS"
+  echo "one_callback_step: $ONE_CALLBACK_STEP"
   echo "replayed_topics: /imu/imu,/os1_cloud_node1/points$([[ "$CAMERA_MODE" == "off" ]] || echo ,/left/image_raw)"
   echo "bag_rate: $RATE"
   echo "ros_master_uri: $ROS_MASTER_URI"

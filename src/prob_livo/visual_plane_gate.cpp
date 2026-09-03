@@ -50,14 +50,14 @@ VisualPlaneGateDecision EvaluateVisualPlaneGate(
     return decision;
   }
 
-  if (!input.uncertainty_valid || !input.normal.allFinite() ||
-      !IsFinitePositiveSemidefinite(input.plane_covariance) ||
-      !IsFinitePositiveSemidefinite(input.point_covariance)) {
+  if (!input.uncertainty_valid || !input.point_W.allFinite() ||
+      !input.normal.allFinite() || !input.plane_covariance.allFinite() ||
+      !input.point_covariance.allFinite()) {
     return decision;
   }
 
   Eigen::Vector4d J_plane;
-  J_plane << input.normal, 1.0;
+  J_plane << input.point_W, 1.0;
   const double plane_variance =
       (J_plane.transpose() * input.plane_covariance * J_plane)(0, 0);
   const double point_variance =

@@ -1,11 +1,34 @@
 #include "prob_livo/prob_plane_provider.h"
 
-#include <Eigen/Eigenvalues>
-
 #include <algorithm>
 #include <cmath>
 
 namespace prob_livo {
+
+namespace {
+
+// Closed-form largest eigenvalue for a real symmetric 3x3 matrix. This is
+// mathematically the same lambda_max used by FAST's support radius, but avoids
+// a second Eigen eigensolver after the same HKNN support has already been
+// traversed. There is no persistent query state or cache.
+double LargestSymmetricEigenvalue(const Eigen::Matrix3d &input) {
+  const Eigen::Matrix3d symmetric =
+      0.5 * (input + input.transpose());
+  const double mean = symmetric.trace() / 3.0;
+  const Eigen::Matrix3d centered =
+      symmetric - mean * Eigen::Matrix3d::Identity();
+  const double p_squared = centered.squaredNorm() / 6.0;
+  if (!(p_squared > 0.0)) return mean;
+
+  const double p = std::sqrt(p_squared);
+  const double denominator = 2.0 * p * p * p;
+  const double determinant_ratio =
+      std::max(-1.0, std::min(1.0, centered.determinant() / denominator));
+  const double phi = std::acos(determinant_ratio) / 3.0;
+  return mean + 2.0 * p * std::cos(phi);
+}
+
+}  // namespace
 
 bool ProbPlaneProvider::QueryAtWorldPoint(
     const Eigen::Vector3d &point_W, ProbPlaneQueryResult &result,
@@ -43,19 +66,20 @@ bool ProbPlaneProvider::QueryAtWorldPoint(
     error = "Prob Super QR plane is invalid for this support";
     return false;
   }
+  const double q_norm = fit.q.norm();
+  result.coeff_nd << fit.q / q_norm, 1.0 / q_norm;
+  result.normal_W = result.coeff_nd.head<3>();
+  result.d = result.coeff_nd[3];
+  result.qr_rank = fit.rank();
+
   const LI2Sup::ProbQrPlane qr = LI2Sup::ComputeProbQrPlane(
       support_points, support_covariances, top_k.count);
-  if (qr.status != LI2Sup::ProbQrPlane::kValid) {
-    error = "Prob Super QR plane covariance is invalid";
-    return false;
-  }
-
-  result.coeff_nd = qr.coeff;
-  result.normal_W = qr.coeff.head<3>();
-  result.d = qr.coeff[3];
-  result.plane_cov_nd = qr.covariance;
-  result.qr_rank = qr.rank;
   result.qr_condition = qr.condition;
+  if (qr.status == LI2Sup::ProbQrPlane::kValid &&
+      qr.covariance.allFinite()) {
+    result.plane_cov_nd = qr.covariance;
+    result.uncertainty_valid = true;
+  }
 
   Eigen::Vector3d support_mean = Eigen::Vector3d::Zero();
   for (const Eigen::Vector3d &support : result.support_points_W)
@@ -71,15 +95,18 @@ bool ProbPlaneProvider::QueryAtWorldPoint(
     support_covariance += delta * delta.transpose();
   }
   support_covariance /= static_cast<double>(result.support_count);
-  Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigensolver(
-      support_covariance);
-  if (eigensolver.info() != Eigen::Success ||
-      !eigensolver.eigenvalues().allFinite()) {
+  if (!support_covariance.allFinite()) {
     error = "Prob plane support spread is invalid";
     return false;
   }
-  result.radius =
-      std::sqrt(std::max(0.0, eigensolver.eigenvalues().maxCoeff()));
+  const double largest_eigenvalue =
+      LargestSymmetricEigenvalue(support_covariance);
+  if (!std::isfinite(largest_eigenvalue)) {
+    error = "Prob plane support spread is invalid";
+    return false;
+  }
+  result.radius = std::sqrt(std::max(0.0, largest_eigenvalue));
+  result.geometry_valid = true;
   result.valid = true;
   error.clear();
   return true;

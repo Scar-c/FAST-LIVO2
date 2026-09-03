@@ -1042,6 +1042,7 @@ void VIOManager::updateReferencePatch(
         gate_input.geometry_valid = true;
         gate_input.uncertainty_valid =
             query_result.uncertainty_valid && pt->covariance_valid_;
+        gate_input.point_W = p_w;
         gate_input.residual = residual;
         gate_input.sensor_range = prob_livo::WorldToLidarRange(
             p_w, state->rot_end, state->pos_end, Rli.transpose(),

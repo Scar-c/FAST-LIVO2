@@ -10,6 +10,7 @@ P5 / I3  numeric divergence attribution
 P6 / I4  pointWithVar adapter + numeric closure
 P7 / I5  corrective pointWithVar + ProbPlaneProvider
 P8 / I6  camera-ON visual closure + visual-gate ablation
+P9 / I6  corrective closure: QR Jacobian, validity split, hot-path/radius cleanup
 I7       downsample ablation cancelled; Super VoxelGridClosest frozen
 I8       generalization
 ```
@@ -48,3 +49,9 @@ The complete Prompt 7 report is in
 `spec/prob_livo/PROMPT7_EVIDENCE.md`; the complete Prompt 8 report is in
 `spec/prob_livo/PROMPT8_EVIDENCE.md`. The user-requested offline runner is
 the preferred regression path after one H1 online/offline parity check.
+
+The exact Prompt 9 text is registered at
+`prompts/prob_livo/prompt9_i6_corrective_closure.md`. Prompt 9 requires one
+post-correction comparison of the normal default online ROS path against the
+canonical offline runner; deterministic one-callback stepping is not valid for
+that comparison.

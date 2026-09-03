@@ -56,6 +56,61 @@ void TestProbabilisticGate(TestContext &context) {
                 "A rejected non-finite plane covariance");
 }
 
+void TestQrNativePointJacobianOracle(TestContext &context) {
+  VisualPlaneGateInput input;
+  input.geometry_valid = true;
+  input.uncertainty_valid = true;
+  input.point_W = Eigen::Vector3d(2.0, 1.5, 3.0);
+  input.normal = Eigen::Vector3d(0.6, -0.8, 0.0);
+  input.radial_distance = 0.0;
+  input.plane_radius = 1.0;
+  input.plane_covariance << 0.20, 0.03, -0.02, 0.04,
+                            0.03, 0.11, 0.025, -0.01,
+                           -0.02, 0.025, 0.17, 0.035,
+                            0.04, -0.01, 0.035, 0.09;
+  input.point_covariance << 0.08, 0.01, 0.0,
+                           0.01, 0.05, 0.012,
+                           0.0, 0.012, 0.06;
+
+  Eigen::Vector4d J_point;
+  J_point << input.point_W, 1.0;
+  const double expected_plane_variance =
+      J_point.transpose() * input.plane_covariance * J_point;
+  const double expected_point_variance =
+      input.normal.transpose() * input.point_covariance * input.normal;
+  const double expected_total_variance = expected_plane_variance +
+                                         expected_point_variance;
+
+  Eigen::Vector4d J_wrong;
+  J_wrong << input.normal, 1.0;
+  const double wrong_total_variance =
+      J_wrong.transpose() * input.plane_covariance * J_wrong +
+      expected_point_variance;
+  context.Check(std::abs(expected_total_variance - wrong_total_variance) > 1e-3,
+                "fixture must kill the [normal^T,1] Jacobian mutation");
+
+  input.residual = 0.99 * 3.0 * std::sqrt(expected_total_variance);
+  auto decision = EvaluateVisualPlaneGate(
+      input, VisualPlaneGateMode::kLivo2Prob3sigma);
+  context.Check(std::abs(decision.total_variance - expected_total_variance) <
+                    1e-12,
+                "A must use the independent QR-native [point_W^T,1] variance");
+  context.Check(decision.second_gate_pass,
+                "independent-oracle inside boundary must pass");
+
+  input.residual = 3.0 * std::sqrt(expected_total_variance);
+  decision = EvaluateVisualPlaneGate(input,
+                                     VisualPlaneGateMode::kLivo2Prob3sigma);
+  context.Check(!decision.second_gate_pass,
+                "independent-oracle exact boundary must fail strictly");
+
+  input.residual = 1.01 * 3.0 * std::sqrt(expected_total_variance);
+  decision = EvaluateVisualPlaneGate(input,
+                                     VisualPlaneGateMode::kLivo2Prob3sigma);
+  context.Check(!decision.second_gate_pass,
+                "independent-oracle outside boundary must fail");
+}
+
 void TestLegacyGateAndSharedRadius(TestContext &context) {
   VisualPlaneGateInput input;
   input.geometry_valid = true;
@@ -120,6 +175,7 @@ void TestSensorRelativeRange(TestContext &context) {
 int main() {
   TestContext context;
   TestProbabilisticGate(context);
+  TestQrNativePointJacobianOracle(context);
   TestLegacyGateAndSharedRadius(context);
   TestSensorRelativeRange(context);
   context.Print("G-I6 visual plane gate policy and sensor-range oracle");

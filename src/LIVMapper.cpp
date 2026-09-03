@@ -450,15 +450,14 @@ void LIVMapper::handleProbVio()
           prob_livo::ProbPlaneQueryResult result;
           const bool ok = prob_livo_backend_->plane_provider().QueryAtWorldPoint(
               point_W, result, error);
-          output.geometry_valid = ok && result.valid;
-          output.uncertainty_valid = output.geometry_valid &&
-                                     result.plane_cov_nd.allFinite();
+          output.geometry_valid = ok && result.geometry_valid;
+          output.uncertainty_valid = ok && result.uncertainty_valid;
           output.normal_W = result.normal_W;
           output.d = result.d;
           output.center_W = result.center_W;
           output.radius = result.radius;
           output.plane_covariance_nd = result.plane_cov_nd;
-          return ok;
+          return output.geometry_valid;
         };
     vio_manager->plot_flag = false;
     vio_manager->processFrame(LidarMeasures.measures.back().img, _pv_list,
