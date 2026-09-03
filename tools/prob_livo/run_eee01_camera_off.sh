@@ -18,6 +18,9 @@ CAMERA_MODE="${PROB_LIVO_CAMERA_MODE:-off}"
 VISUAL_GATE="${PROB_LIVO_VISUAL_PLANE_GATE:-livo2_prob_3sigma}"
 CAMERA_CONFIG="${PROB_LIVO_CAMERA_CONFIG:-$REPO_ROOT/config/camera_NTU_VIRAL.yaml}"
 ONE_CALLBACK_STEP="${PROB_LIVO_ONE_CALLBACK_STEP:-false}"
+MEMORY_CSV="${PROB_LIVO_MEMORY_CSV:-}"
+MEMORY_LABEL="${PROB_LIVO_MEMORY_LABEL:-$CAMERA_MODE}"
+MEMORY_INTERVAL="${PROB_LIVO_MEMORY_INTERVAL:-2}"
 
 case "$CAMERA_MODE" in
   off|h0|h1|h2) ;;
@@ -57,8 +60,10 @@ source "$CATKIN_WS/devel/setup.bash"
 
 CORE_PID=""
 NODE_PID=""
+MEMORY_MONITOR_PID=""
 cleanup() {
   [[ -n "$NODE_PID" ]] && kill -INT "$NODE_PID" 2>/dev/null || true
+  [[ -n "$MEMORY_MONITOR_PID" ]] && kill "$MEMORY_MONITOR_PID" 2>/dev/null || true
   [[ -n "$CORE_PID" ]] && kill "$CORE_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -100,6 +105,9 @@ rosparam set /common/prob_livo_trajectory_path "$RUN_DIR/trajectory.tum"
 rosparam set /imu/imu_en true
 rosparam set /evo/pose_output_en false
 rosparam dump "$RUN_DIR/effective_rosparams.yaml"
+if [[ -n "$MEMORY_CSV" ]]; then
+  mkdir -p "$(dirname "$MEMORY_CSV")"
+fi
 
 {
   echo "repository_root: $REPO_ROOT"
@@ -122,6 +130,9 @@ rosparam dump "$RUN_DIR/effective_rosparams.yaml"
   echo "camera_config: $([[ "$CAMERA_MODE" == "off" ]] && echo none || echo "$CAMERA_CONFIG")"
   echo "input_semantics: $INPUT_SEMANTICS"
   echo "one_callback_step: $ONE_CALLBACK_STEP"
+  echo "memory_csv: ${MEMORY_CSV:-none}"
+  echo "memory_label: ${MEMORY_CSV:+$MEMORY_LABEL}"
+  echo "memory_interval_seconds: ${MEMORY_CSV:+$MEMORY_INTERVAL}"
   echo "replayed_topics: /imu/imu,/os1_cloud_node1/points$([[ "$CAMERA_MODE" == "off" ]] || echo ,/left/image_raw)"
   echo "bag_rate: $RATE"
   echo "ros_master_uri: $ROS_MASTER_URI"
@@ -136,6 +147,12 @@ if ! kill -0 "$NODE_PID" 2>/dev/null; then
   echo "ERR: fastlivo_mapping exited during startup" >&2
   exit 4
 fi
+if [[ -n "$MEMORY_CSV" ]]; then
+  python3 "$REPO_ROOT/tools/prob_livo/memory_monitor.py" \
+    --pid "$NODE_PID" --csv "$MEMORY_CSV" --label "$MEMORY_LABEL" \
+    --interval "$MEMORY_INTERVAL" >"$RUN_DIR/memory_monitor.log" 2>&1 &
+  MEMORY_MONITOR_PID=$!
+fi
 
 RUN_START_EPOCH=$(date +%s)
 TOPICS=(/imu/imu /os1_cloud_node1/points)
@@ -149,6 +166,12 @@ kill -INT "$NODE_PID" 2>/dev/null || true
 wait "$NODE_PID" 2>/dev/null
 NODE_RC=$?
 NODE_PID=""
+MEMORY_RC=0
+if [[ -n "$MEMORY_MONITOR_PID" ]]; then
+  wait "$MEMORY_MONITOR_PID" 2>/dev/null
+  MEMORY_RC=$?
+  MEMORY_MONITOR_PID=""
+fi
 COUNTERS_PATH="$RUN_DIR/trajectory.tum.counters.yaml"
 if [[ -s "$COUNTERS_PATH" ]]; then
   COUNTER_RC=0
@@ -170,7 +193,8 @@ else
 fi
 
 if [[ "$PLAY_RC" -eq 0 && ( "$NODE_RC" -eq 0 || "$NODE_RC" -eq 130 ) && \
-      "$COUNTER_RC" -eq 0 && "$GT_RC" -eq 0 && "$EVAL_RC" -eq 0 ]]; then
+      "$COUNTER_RC" -eq 0 && "$MEMORY_RC" -eq 0 && "$GT_RC" -eq 0 && \
+      "$EVAL_RC" -eq 0 ]]; then
   RC=0
 else
   RC=1
@@ -181,6 +205,7 @@ fi
   echo "authority_counters: $COUNTERS_PATH"
   echo "visual_counters: $RUN_DIR/trajectory.tum.visual_counters.yaml"
   echo "counter_rc: $COUNTER_RC"
+  echo "memory_rc: $MEMORY_RC"
   echo "ground_truth_rc: $GT_RC"
   echo "evaluation_rc: $EVAL_RC"
   echo "trajectory_rows: $(wc -l < "$RUN_DIR/trajectory.tum" 2>/dev/null || echo 0)"
