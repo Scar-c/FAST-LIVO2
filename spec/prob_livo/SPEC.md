@@ -318,8 +318,8 @@ no reliance on old build/ or devel/
 | I3 | Prob-LIO P0–P4 backend, camera OFF + Super-input corrective | CLOSED / OWNER VERIFIED; `NUMERIC_IMPLEMENTATION_DIFFERENCE_CONFIRMED` |
 | I4 | `pointWithVar`-compatible current-scan adapter | CLOSED / OWNER VERIFIED |
 | I5 | `ProbPlaneProvider` | CLOSED/PASS — Owner audit pending |
-| I6 | camera ON / FAST-LIVO2 visual sequential closure | NOT STARTED |
-| I7 | visual-gate + downsample ablations | NOT STARTED |
+| I6 | camera ON / FAST-LIVO2 visual sequential closure + visual-gate ablation | CLOSED/PASS — Owner audit pending |
+| I7 | downsample ablation | CANCELLED; Super VoxelGridClosest frozen |
 | I8 | generalization / multi-dataset validation | NOT STARTED |
 
 Prompt index names are P0–P8 but retain these I0–I8 semantics.
@@ -860,3 +860,43 @@ radius mutations, canonical residual variance, a populated backend-owned map,
 read-only state/map/counter invariance, and a bounded 1000-query timing check.
 No camera/VIO runtime, `VisualPoint`, reference-patch update, photometric
 update, P5 association, or second LiDAR map was enabled.
+
+## 20. Prompt 8 / I6 — camera-on visual closure and gate ablation
+
+Prompt 8 is registered at
+`prompts/prob_livo/prompt8_i6_camera_on_visual_gate_ablation.md`; its SHA256 is
+`cb2bfb52a4304a0c69b37dc9c997a7ea582793f9a610e8ed1d2948555beb65be`. The
+complete report is `spec/prob_livo/PROMPT8_EVIDENCE.md`.
+
+I6 wires the verified I4 current-scan `pointWithVar` adapter and I5 read-only
+`ProbPlaneProvider` into FAST's production visual sequence. The Prob backend
+and FAST visual update operate sequentially on one host x19/P19. H0 keeps the
+camera scheduler/image flow on while disabling visual state updates; H1 uses
+the native Prob 4x4 plane covariance plus FAST VisualPoint covariance for the
+strict probabilistic 3sigma gate; H2 uses the source-audited Super legacy
+`length > 81 * residual * residual` gate with sensor-relative LiDAR range.
+The common `3 * radius` gate, Super VoxelGridClosest, P0–P4, FAST pyramid,
+exposure, rollback, and commit semantics remain fixed. LiDAR P5 is not wired.
+
+The project-owned offline runner now dispatches image messages as well as IMU
+and LiDAR in bag-record order, runs the same current FAST-LIVO2 scheduler and
+backend callbacks, and uses TBB maximum parallelism 32. One H1 online
+one-callback run was compared with H1 offline: 3979 rows, identical trajectory
+SHA256 `315c8b0ec74e409bb1a22ac08de6725d1ee042c563e546ec1591b52ef80825aa`,
+identical counters, and zero translation/field difference. Per owner
+decision, later H0/H2 regressions use offline only.
+
+The full EEE01 offline ablation is valid and visual-active for H1/H2:
+
+```text
+H0: 3979 rows, 3326 matches, ATE 0.09138258970792523 m,
+    visual commits 0
+H1: 3979 rows, 3326 matches, ATE 0.08862454637627792 m,
+    second gate 36909 pass / 82 reject
+H2: 3979 rows, 3326 matches, ATE 0.08793104514326024 m,
+    second gate 36817 pass / 3 reject
+```
+
+I6 is `CLOSED/PASS — Owner audit pending`. I7 visual gate ablation is
+moved into I6; the I7 downsample ablation remains cancelled and I8 has not
+started.

@@ -478,3 +478,32 @@ in-process runner with `super_ntu_legacy` semantics and TBB maximum
 parallelism 32. It produced 3981 rows, ATE `0.09099574805341126 m`, and the
 same trajectory SHA as the pre-corrective baseline; no camera/VIO or P5 path
 was enabled. I6–I8 remain not started.
+
+## Prompt 8 Evidence
+
+Prompt 8 is registered at
+`prompts/prob_livo/prompt8_i6_camera_on_visual_gate_ablation.md`, SHA256
+`cb2bfb52a4304a0c69b37dc9c997a7ea582793f9a610e8ed1d2948555beb65be`. The
+complete evidence report is `spec/prob_livo/PROMPT8_EVIDENCE.md`.
+
+The implementation extends the project-owned in-process offline runner to
+dispatch EEE01 images and drive the same FAST-LIVO2 scheduler, I4 adapter,
+I5 ProbPlaneProvider, shared x19/P19, and FAST visual pipeline used by online
+operation. TBB maximum parallelism is 32. One H1 online one-callback run was
+compared to H1 offline and matched exactly: 3979 rows, trajectory SHA256
+`315c8b0ec74e409bb1a22ac08de6725d1ee042c563e546ec1591b52ef80825aa`,
+identical counters, and zero translation/field difference. Subsequent H0/H2
+regressions were offline-only per the user decision.
+
+Final offline runs use one fixed bag/config and Super VoxelGridClosest:
+
+```text
+H0: 3979 rows, 3326 matches, ATE 0.09138258970792523 m, commits 0
+H1: 3979 rows, 3326 matches, ATE 0.08862454637627792 m
+H2: 3979 rows, 3326 matches, ATE 0.08793104514326024 m
+```
+
+The focused result is `[PASS] G-I6 visual plane gate policy and sensor-range
+oracle checks=14`; I1–I5 focused tests and the full CMake build also pass.
+I6 is `CLOSED/PASS — Owner audit pending`; I7 visual ablation is moved into
+I6, I7 downsample ablation is cancelled, and I8 is not started.

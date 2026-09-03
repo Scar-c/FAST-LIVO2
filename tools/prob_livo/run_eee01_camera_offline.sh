@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Camera-OFF production offline runner. It reads the bag in-process and feeds
-# the same FAST/LIVO2 callbacks, scheduler, and Prob-LIO backend as online use.
+# Production offline runner for H0/H1/H2. It reads the bag in-process and
+# feeds the same FAST/LIVO2 callbacks, scheduler, and Prob-LIO backend as the
+# online runner; camera mode selects scheduler-only or visual processing.
 
 set -u
 

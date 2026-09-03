@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Canonical Prompt-3 camera-OFF Prob-LIO P0-P4 runner.
-# One FAST scheduler/node, one Prob OctVox backend, and only the NTU IMU/LiDAR
-# topics are replayed.  Every invocation writes a unique, self-describing run.
+# Canonical ROS Prob-LIVO runner for Prompt-3 camera-OFF and Prompt-8 H0/H1/H2.
+# One FAST scheduler/node and one Prob OctVox backend are used. Every
+# invocation writes a unique, self-describing run.
 
 set -u
 

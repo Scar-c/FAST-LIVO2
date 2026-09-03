@@ -18,9 +18,10 @@
 
 namespace prob_livo {
 
-// Camera-OFF Prob-LIO backend.  This class is the sole owner of lifecycle,
-// per-scan buffers, map state, and the shared ProbESKF19 reference.  FAST's
-// LIVMapper remains the ROS/scheduler shell.
+// Prob-LIVO backend. This class is the sole owner of lifecycle, per-scan
+// buffers, map state, and the shared ProbESKF19 reference. FAST's LIVMapper
+// remains the ROS/scheduler shell and may append the camera epoch after the
+// visual update in LIVO mode.
 class ProbLioBackend {
  public:
   struct Options {

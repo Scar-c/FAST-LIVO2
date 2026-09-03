@@ -214,3 +214,34 @@ identical to its pre-corrective baseline (3981 rows; ATE
 `d06e472b04f7d304d1462b30b2077766f62bf7047cd4247f909c96b3ca277f03`) with
 TBB maximum parallelism 32. Camera/VIO, P5, FAST's legacy map, and I6 remain
 out of scope.
+
+## Prompt 8 / I6 — camera-on visual closure and visual gate ablation
+
+Prompt 8 adds the camera-on FAST visual integration over the existing Prob
+P0–P4 backend. The production sequence remains FAST-owned:
+`retrieveFromVisualSparseMap`, photometric EKF update, VisualPoint creation,
+tracked-point update, and reference-patch update. The I4 adapter supplies the
+current scan, while the I5 provider supplies arbitrary visual-plane queries
+from the same backend-owned Prob OctVox. Both operate directly on the shared
+host x19/P19; no second filter or active FAST LiDAR geometry query is used.
+
+The visual second-gate switch is
+`prob_livo/visual_plane_gate = livo2_prob_3sigma | super_legacy`. A uses
+`J_nd Sigma_nd J_nd^T + n^T Sigma_VP n` with strict `|r| < 3 sigma`; B uses
+the exact source-audited Super condition
+`length > 81 * residual * residual`, where length is sensor-relative LiDAR
+range. The shared `3 * radius` gate, Super VoxelGridClosest, P0–P4, FAST
+visual core, exposure, pyramid, rollback and commit behavior are unchanged;
+LiDAR P5 is still excluded.
+
+The offline runner was extended to replay `/left/image_raw` in record order,
+invoke the same production scheduler/backend callbacks, and select H0/H1/H2
+without calling the old Super runtime. TBB maximum parallelism is 32. A
+single H1 online one-callback run matched H1 offline exactly (3979 rows,
+identical SHA256 and counters, zero translation/field difference). All later
+H0/H2 runs used offline only, as requested. The full-bag H1/H2 counters prove
+real visual activity; H0 has zero visual commits.
+
+I6 is `CLOSED/PASS — Owner audit pending`; I7 visual-gate ablation is
+complete inside I6, I7 downsample ablation is cancelled, and I8 is not
+started.
