@@ -1,9 +1,9 @@
 # Prob-LIVO Integration Specification
 
-Status: Prompt 6 / I3 numeric closure and I4 current-scan adapter; I0, I1,
-I2, and I3 are `CLOSED / OWNER VERIFIED`. I3 final classification is
-`NUMERIC_IMPLEMENTATION_DIFFERENCE_CONFIRMED`. I4 is
-`CLOSED/PASS — Owner audit pending`; camera/VIO remains OFF and I5–I8 are not
+Status: Prompt 7 / I4 corrective closure and I5 plane provider; I0, I1, I2,
+I3, and I4 are `CLOSED / OWNER VERIFIED`. I3 final classification is
+`NUMERIC_IMPLEMENTATION_DIFFERENCE_CONFIRMED`. I5 is
+`CLOSED/PASS — Owner audit pending`; camera/VIO remains OFF and I6–I8 are not
 started. The Super-input EEE01 comparison remains
 `SUPER_INPUT_TRAJECTORY_NEAR_PARITY`; the historical FAST-native result
 remains a separate control.
@@ -148,8 +148,8 @@ not to change before the listed stage.
 | H9 | P3 QR covariance | FAST 6x6 PCA covariance | Prob 4x4 QR covariance | P4/provider | `include/prob_livo/super_native/prob_qr_plane.h`; `src/prob_livo/prob_lio_backend.cpp:307-315` | I3/I5 | CLOSED/PASS — Owner audit pending |
 | H10 | LiDAR association | FAST `build_single_residual` gate | Super legacy gate | LIO residual construction | `include/prob_livo/super_native/prob_qr_plane.h`; `src/prob_livo/prob_lio_backend.cpp:300-326` | I3 | CLOSED/PASS — Owner audit pending |
 | H11 | P4 weighting | FAST active variance weight | Prob P4 `w=1/R_i` | IESKF information update | `include/prob_livo/super_native/prob_geometry_p0_p4.h`; `src/prob_livo/prob_lio_backend.cpp:335-355` | I3 | CLOSED/PASS — Owner audit pending |
-| H12 | current scan output | `VoxelMapManager::pv_list_` | `pointWithVar`-compatible adapter | FAST VIO shell | FAST `pointWithVar` ABI, `include/common_lib.h:102-123`; `ProbPointWithVarAdapter` | I4 | CLOSED/PASS — Owner audit pending |
-| H13 | visual plane provider | direct FAST map lookup | `VisualPlanePrior` adapter from OctVox/HKNN/QR/P3 | VIO plane/raycast paths | provider contract in §6 | I5 | NOT STARTED |
+| H12 | current scan output | `VoxelMapManager::pv_list_` | corrected `pointWithVar` adapter | FAST VIO shell | FAST `pointWithVar` ABI, `include/common_lib.h:106-127`; `ProbPointWithVarAdapter` | I4 | CLOSED / OWNER VERIFIED |
+| H13 | visual plane provider | direct FAST map lookup | read-only `ProbPlaneProvider` from OctVox/HKNN/QR/P3 | VIO plane/raycast paths | `include/prob_livo/prob_plane_provider.h`; `src/prob_livo/prob_plane_provider.cpp` | I5 | CLOSED/PASS — Owner audit pending |
 | H14 | visual 3σ consistency gate | `updateReferencePatch` | unchanged FAST gate | visual point lifecycle | FAST `src/vio.cpp:969-1021` | I6 | FROZEN UNTIL I6 |
 | H15 | VIO update on x19/P19 | `VIOManager::updateState*` | unchanged visual update over shared state | shared estimator | FAST `src/vio.cpp:1398-1680` | I6 | FROZEN UNTIL I6 |
 | H16 | visual `feat_map` lifecycle | FAST `VIOManager::feat_map` | unchanged FAST visual map | VIO | FAST `include/vio.h:126-130`, `src/vio.cpp:804-967` | I6 | FROZEN UNTIL I6 |
@@ -316,8 +316,8 @@ no reliance on old build/ or devel/
 | I1 | `ProbESKF19` | CLOSED / OWNER VERIFIED |
 | I2 | Super IMU + undistort under LIVO2 scheduler | CLOSED / OWNER VERIFIED |
 | I3 | Prob-LIO P0–P4 backend, camera OFF + Super-input corrective | CLOSED / OWNER VERIFIED; `NUMERIC_IMPLEMENTATION_DIFFERENCE_CONFIRMED` |
-| I4 | `pointWithVar`-compatible current-scan adapter | CLOSED/PASS — Owner audit pending |
-| I5 | `ProbPlaneProvider` | NOT STARTED |
+| I4 | `pointWithVar`-compatible current-scan adapter | CLOSED / OWNER VERIFIED |
+| I5 | `ProbPlaneProvider` | CLOSED/PASS — Owner audit pending |
 | I6 | camera ON / FAST-LIVO2 visual sequential closure | NOT STARTED |
 | I7 | visual-gate + downsample ablations | NOT STARTED |
 | I8 | generalization / multi-dataset validation | NOT STARTED |
@@ -831,3 +831,32 @@ constructed after `BuildAndSolveScan()` and before `UpdateMap()`; it does not
 call Process2, undistort, query VoxelMapManager, add pose covariance, fit
 planes, update `feat_map`, or invoke VIO. Runtime counters are
 `adapted_scans` and `adapted_points`.
+
+## Prompt 7 / I4 corrective closure and I5 ProbPlaneProvider
+
+Prompt 7 is registered at
+`prompts/prob_livo/prompt7_i4_corrective_i5_plane_provider.md`.
+The I4 corrective makes the FAST visual contract explicit: `body_var` carries
+the canonical LiDAR-frame `Sigma_L`; `var_nostate` carries
+`R_WI Sigma_I R_WI^T`; and `var` adds the exact FAST visual point state
+propagation `(-[p_i]x)P_rr(-[p_i]x)^T + P_tt`, using host x19 blocks 0:3
+and 3:6. The current accepted Super QR world normal is copied by the same
+point index; rejected points retain the zero sentinel. A production-used
+`PrepareVisualMapCandidate` seam now exercises FAST's actual normal skip and
+point/covariance handoff semantics.
+
+I5 adds one read-only `ProbPlaneProvider::QueryAtWorldPoint(p_W, result,
+error)` module. It references the `ProbLioBackend`-owned OctVox map, reuses
+the same Super HKNN ordering and `SolvePlaneFitQr`/`ComputeProbQrPlane`, and
+returns `[n,d]`, support identities/points/covariances, native 4x4 `[n,d]`
+covariance, projected support centroid, and FAST-source support radius. The
+provider does not cache, insert, clear, mutate filter state, run a current
+scan association, or expose FAST's legacy map. Its normal sign preserves QR
+orientation; view-facing flips remain a future consumer concern.
+
+The I5 fixture covers valid tilted support, insufficient support, rank
+deficiency, support identity/order/covariance parity, projected-center and
+radius mutations, canonical residual variance, a populated backend-owned map,
+read-only state/map/counter invariance, and a bounded 1000-query timing check.
+No camera/VIO runtime, `VisualPoint`, reference-patch update, photometric
+update, P5 association, or second LiDAR map was enabled.

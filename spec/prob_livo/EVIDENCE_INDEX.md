@@ -456,3 +456,25 @@ The I4 source audit and final gate report are recorded in
 `src/prob_livo/prob_point_with_var_adapter.cpp`; its focused gates are
 `tests/prob_livo/test_i4_point_with_var_adapter.cpp` and executable
 `prob_livo_i4_tests`.
+
+## Prompt 7 Evidence
+
+Prompt 7 is registered at
+`prompts/prob_livo/prompt7_i4_corrective_i5_plane_provider.md`, SHA256
+`4d767b929e2d120f8082fdc093dc748398c819eb4cad8a36449d02d378430eeb`. The
+complete report is `spec/prob_livo/PROMPT7_EVIDENCE.md`.
+
+I4 is closed as `CLOSED / OWNER VERIFIED` after correcting the FAST
+`pointWithVar` covariance contract and replacing the prior artificial consumer
+check with the production-used visual candidate seam. I5 is
+`CLOSED/PASS — Owner audit pending`: `ProbPlaneProvider` is a read-only view
+over the backend-owned Prob OctVox map, with canonical HKNN/QR support parity,
+projected support-centroid center, FAST-source support radius, and native
+4x4 `[n,d]` covariance. The focused result is
+`[PASS] G-I5 ProbPlaneProvider parity and read-only gates checks=111`.
+
+The Prompt7 camera-OFF offline verification used the repository-owned
+in-process runner with `super_ntu_legacy` semantics and TBB maximum
+parallelism 32. It produced 3981 rows, ATE `0.09099574805341126 m`, and the
+same trajectory SHA as the pre-corrective baseline; no camera/VIO or P5 path
+was enabled. I6–I8 remain not started.

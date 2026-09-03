@@ -188,3 +188,29 @@ the camera-OFF Prob runtime only as a dormant current-scan producer with
 `adapted_scans`/`adapted_points` counters. It does not re-run FAST Process2,
 undistort twice, use FAST's LiDAR map, add pose covariance, fit planes, update
 `feat_map`, or invoke VIO.
+
+## Prompt 7 / I4 corrective closure and I5 ProbPlaneProvider
+
+Prompt 7 registered the exact owner prompt at
+`prompts/prob_livo/prompt7_i4_corrective_i5_plane_provider.md`, SHA256
+`4d767b929e2d120f8082fdc093dc748398c819eb4cad8a36449d02d378430eeb`.
+I4 was corrected and closed as `CLOSED / OWNER VERIFIED`: `body_var` is
+canonical LiDAR-frame `Sigma_L`, `var_nostate` is world sensor-only
+`R_WI Sigma_I R_WI^T`, and `var` includes FAST's x19 rotation/translation
+state propagation. Accepted current-scan QR normals are copied by source
+index, while rejected points retain the zero sentinel. The production-used
+`PrepareVisualMapCandidate()` seam exercises FAST's native normal skip and
+visual covariance handoff.
+
+I5 adds the read-only `ProbPlaneProvider` over the backend-owned Prob OctVox
+map. It reuses authoritative HKNN support ordering, Super QR plane fitting,
+and native 4x4 `[n,d]` covariance; it returns the projected support centroid,
+source-grounded FAST support radius, support identities/points/covariances,
+and leaves all frame transforms to the future visual caller. The focused gate
+result is `[PASS] G-I5 ProbPlaneProvider parity and read-only gates checks=111`.
+The clean camera-OFF `super_ntu_legacy` offline run remained trajectory
+identical to its pre-corrective baseline (3981 rows; ATE
+`0.09099574805341126 m`; trajectory SHA
+`d06e472b04f7d304d1462b30b2077766f62bf7047cd4247f909c96b3ca277f03`) with
+TBB maximum parallelism 32. Camera/VIO, P5, FAST's legacy map, and I6 remain
+out of scope.

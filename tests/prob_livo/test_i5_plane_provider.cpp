@@ -113,6 +113,14 @@ void TestProviderParityAndCenter(TestContext &context) {
                  .cwiseAbs()
                  .maxCoeff(),
              0.0, "parity.qr_covariance");
+  const double direct_residual_variance =
+      LI2Sup::PlaneResidualVariance(query, direct_plane.covariance);
+  Eigen::Vector4d query_h;
+  query_h << query, 1.0;
+  const double provider_residual_variance =
+      query_h.dot(result.plane_cov_nd * query_h);
+  CheckClose(context, provider_residual_variance - direct_residual_variance,
+             0.0, "parity.query_residual_variance");
 
   Eigen::Vector3d support_mean = Eigen::Vector3d::Zero();
   for (const Eigen::Vector3d &point : result.support_points_W)
