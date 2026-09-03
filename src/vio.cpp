@@ -900,6 +900,7 @@ void VIOManager::generateVisualMapPoints(cv::Mat img, vector<pointWithVar> &pg)
   // double t_b2 = omp_get_wtime() - t0;
 
   printf("[ VIO ] Append %d new visual map points\n", add);
+  runtime_counters_.visual_points_created += add;
   // printf("pg.size: %d \n", pg.size());
   // printf("B1. : %.6lf \n", t_b1);
   // printf("B2. : %.6lf \n", t_b2);
@@ -964,6 +965,7 @@ void VIOManager::updateVisualMapPoints(cv::Mat img)
     }
   }
   printf("[ VIO ] Update %d points in visual submap\n", update_num);
+  runtime_counters_.reference_patch_update_attempts += update_num;
 }
 
 void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &plane_map)
@@ -980,6 +982,7 @@ void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelO
     if (update_flag[i] == 0) continue;
 
     const V3D &p_w = pt->pos_;
+    runtime_counters_.reference_patch_update_attempts++;
     float loc_xyz[3];
     for (int j = 0; j < 3; j++)
     {
@@ -988,6 +991,7 @@ void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelO
     }
     VOXEL_LOCATION position((int64_t)loc_xyz[0], (int64_t)loc_xyz[1], (int64_t)loc_xyz[2]);
     auto iter = plane_map.find(position);
+    runtime_counters_.plane_queries++;
     if (iter != plane_map.end())
     {
       VoxelOctoTree *current_octo;
@@ -1093,6 +1097,7 @@ void VIOManager::updateReferencePatch(const unordered_map<VOXEL_LOCATION, VoxelO
         score_max = score;
         pt->ref_patch = ref_patch_temp;
         pt->has_ref_patch_ = true;
+        runtime_counters_.reference_patch_updates_accepted++;
       }
     }
 

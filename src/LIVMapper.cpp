@@ -12,6 +12,20 @@ which is included as part of this source code package.
 
 #include "LIVMapper.h"
 
+#include <chrono>
+#include <filesystem>
+
+namespace {
+
+using NativeClock = std::chrono::steady_clock;
+
+double NativeElapsedSeconds(const NativeClock::time_point &begin)
+{
+  return std::chrono::duration<double>(NativeClock::now() - begin).count();
+}
+
+}  // namespace
+
 LIVMapper::LIVMapper(ros::NodeHandle &nh)
     : extT(0, 0, 0),
       extR(M3D::Identity())
@@ -78,6 +92,8 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
 
   nh.param<string>("evo/seq_name", seq_name, "01");
   nh.param<bool>("evo/pose_output_en", pose_output_en, false);
+  nh.param<string>("evo/trajectory_output_path", trajectory_output_path_, "");
+  nh.param<string>("evo/runtime_report_directory", runtime_report_directory_, "");
   nh.param<double>("imu/gyr_cov", gyr_cov, 1.0);
   nh.param<double>("imu/acc_cov", acc_cov, 1.0);
   nh.param<int>("imu/imu_int_frame", imu_int_frame, 3);
@@ -247,7 +263,7 @@ void LIVMapper::gravityAlignment()
 
 void LIVMapper::processImu() 
 {
-  // double t0 = omp_get_wtime();
+  const auto begin = NativeClock::now();
 
   p_imu->Process2(LidarMeasures, _state, feats_undistort);
 
@@ -256,6 +272,10 @@ void LIVMapper::processImu()
   state_propagat = _state;
   voxelmap_manager->state_ = _state;
   voxelmap_manager->feats_undistort_ = feats_undistort;
+
+  runtime_counters_.imu_processing_calls++;
+  runtime_timing_.imu_s += NativeElapsedSeconds(begin);
+  runtime_timing_.imu_count++;
 
   // double t_prop = omp_get_wtime();
 
@@ -278,8 +298,78 @@ void LIVMapper::stateEstimationAndMapping()
   }
 }
 
+void LIVMapper::writeTrajectoryPose(double timestamp)
+{
+  if (!pose_output_en) return;
+
+  const std::string output_path = trajectory_output_path_.empty()
+                                      ? std::string(ROOT_DIR) + "Log/result/" +
+                                            seq_name + ".txt"
+                                      : trajectory_output_path_;
+  if (!trajectory_output_initialized_ && !trajectory_output_path_.empty()) {
+    const std::filesystem::path path(output_path);
+    if (path.has_parent_path()) {
+      std::error_code error;
+      std::filesystem::create_directories(path.parent_path(), error);
+      if (error) ROS_ERROR("cannot create trajectory directory: %s",
+                           error.message().c_str());
+    }
+  }
+
+  std::ofstream output(
+      output_path,
+      trajectory_output_initialized_ ? std::ios::app : std::ios::out);
+  if (!output.is_open()) {
+    ROS_ERROR("cannot open trajectory output: %s", output_path.c_str());
+    return;
+  }
+  const Eigen::Quaterniond q(_state.rot_end);
+  output << std::fixed << timestamp << " " << _state.pos_end[0] << " "
+         << _state.pos_end[1] << " " << _state.pos_end[2] << " " << q.x()
+         << " " << q.y() << " " << q.z() << " " << q.w() << std::endl;
+  trajectory_output_initialized_ = true;
+  runtime_counters_.trajectory_rows++;
+}
+
+bool LIVMapper::ProcessAvailableNativeEpochs()
+{
+  const auto begin = NativeClock::now();
+  runtime_counters_.scheduler_step_calls++;
+  if (!sync_packages(LidarMeasures)) return false;
+
+  runtime_counters_.scheduler_sync_packages++;
+  if (LidarMeasures.lio_vio_flg == VIO)
+    runtime_counters_.camera_epochs++;
+  else
+    runtime_counters_.lidar_epochs++;
+
+  handleFirstFrame();
+  processImu();
+  stateEstimationAndMapping();
+  runtime_timing_.estimator_compute_s += NativeElapsedSeconds(begin);
+  runtime_timing_.estimator_compute_count++;
+  return true;
+}
+
+std::size_t LIVMapper::DrainAvailableNativeEpochs(std::size_t max_attempts)
+{
+  std::size_t processed = 0;
+  std::size_t idle_attempts = 0;
+  for (std::size_t attempt = 0; attempt < max_attempts; ++attempt) {
+    if (ProcessAvailableNativeEpochs()) {
+      ++processed;
+      idle_attempts = 0;
+    } else if (++idle_attempts >= 16) {
+      break;
+    }
+  }
+  return processed;
+}
+
 void LIVMapper::handleVIO() 
 {
+  runtime_counters_.visual_process_calls++;
+  const auto visual_begin = NativeClock::now();
   euler_cur = RotMtoEuler(_state.rot_end);
   fout_pre << std::setw(20) << LidarMeasures.last_lio_update_time - _first_lidar_time << " " << euler_cur.transpose() * 57.3 << " "
             << _state.pos_end.transpose() << " " << _state.vel_end.transpose() << " " << _state.bias_g.transpose() << " "
@@ -303,6 +393,9 @@ void LIVMapper::handleVIO()
   }
 
   vio_manager->processFrame(LidarMeasures.measures.back().img, _pv_list, voxelmap_manager->voxel_map_, LidarMeasures.last_lio_update_time - _first_lidar_time);
+  runtime_counters_.visual_state_commits++;
+  runtime_timing_.visual_processing_s += NativeElapsedSeconds(visual_begin);
+  runtime_timing_.visual_processing_count++;
 
   if (imu_prop_enable) 
   {
@@ -326,6 +419,7 @@ void LIVMapper::handleVIO()
 
   publish_frame_world(pubLaserCloudFullRes, vio_manager);
   publish_img_rgb(pubImage, vio_manager);
+  writeTrajectoryPose(LidarMeasures.measures.back().vio_time);
 
   euler_cur = RotMtoEuler(_state.rot_end);
   fout_out << std::setw(20) << LidarMeasures.last_lio_update_time - _first_lidar_time << " " << euler_cur.transpose() * 57.3 << " "
@@ -335,6 +429,7 @@ void LIVMapper::handleVIO()
 
 void LIVMapper::handleLIO() 
 {    
+  const auto lidar_begin = NativeClock::now();
   euler_cur = RotMtoEuler(_state.rot_end);
   fout_pre << setw(20) << LidarMeasures.last_lio_update_time - _first_lidar_time << " " << euler_cur.transpose() * 57.3 << " "
            << _state.pos_end.transpose() << " " << _state.vel_end.transpose() << " " << _state.bias_g.transpose() << " "
@@ -343,6 +438,8 @@ void LIVMapper::handleLIO()
   if (feats_undistort->empty() || (feats_undistort == nullptr)) 
   {
     std::cout << "[ LIO ]: No point!!!" << std::endl;
+    runtime_timing_.lidar_association_update_s += NativeElapsedSeconds(lidar_begin);
+    runtime_timing_.lidar_association_update_count++;
     return;
   }
 
@@ -367,7 +464,11 @@ void LIVMapper::handleLIO()
 
   double t1 = omp_get_wtime();
 
+  const auto map_query_begin = NativeClock::now();
   voxelmap_manager->StateEstimation(state_propagat);
+  runtime_counters_.map_query_calls++;
+  runtime_timing_.map_query_s += NativeElapsedSeconds(map_query_begin);
+  runtime_timing_.map_query_count++;
   _state = voxelmap_manager->state_;
   _pv_list = voxelmap_manager->pv_list_;
 
@@ -381,28 +482,7 @@ void LIVMapper::handleLIO()
     state_update_flg = true;
   }
 
-  if (pose_output_en) 
-  {
-    static bool pos_opend = false;
-    static int ocount = 0;
-    std::ofstream outFile, evoFile;
-    if (!pos_opend) 
-    {
-      evoFile.open(std::string(ROOT_DIR) + "Log/result/" + seq_name + ".txt", std::ios::out);
-      pos_opend = true;
-      if (!evoFile.is_open()) ROS_ERROR("open fail\n");
-    } 
-    else 
-    {
-      evoFile.open(std::string(ROOT_DIR) + "Log/result/" + seq_name + ".txt", std::ios::app);
-      if (!evoFile.is_open()) ROS_ERROR("open fail\n");
-    }
-    Eigen::Matrix4d outT;
-    Eigen::Quaterniond q(_state.rot_end);
-    evoFile << std::fixed;
-    evoFile << LidarMeasures.last_lio_update_time << " " << _state.pos_end[0] << " " << _state.pos_end[1] << " " << _state.pos_end[2] << " "
-            << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << std::endl;
-  }
+  writeTrajectoryPose(LidarMeasures.last_lio_update_time);
   
   euler_cur = RotMtoEuler(_state.rot_end);
   geoQuat = tf::createQuaternionMsgFromRollPitchYaw(euler_cur(0), euler_cur(1), euler_cur(2));
@@ -421,7 +501,11 @@ void LIVMapper::handleLIO()
           (-point_crossmat) * _state.cov.block<3, 3>(0, 0) * (-point_crossmat).transpose() + _state.cov.block<3, 3>(3, 3);
     voxelmap_manager->pv_list_[i].var = var;
   }
+  const auto map_update_begin = NativeClock::now();
   voxelmap_manager->UpdateVoxelMap(voxelmap_manager->pv_list_);
+  runtime_counters_.map_update_calls++;
+  runtime_timing_.map_update_s += NativeElapsedSeconds(map_update_begin);
+  runtime_timing_.map_update_count++;
   std::cout << "[ LIO ] Update Voxel Map" << std::endl;
   _pv_list = voxelmap_manager->pv_list_;
   
@@ -450,6 +534,9 @@ void LIVMapper::handleLIO()
 
   frame_num++;
   aver_time_consu = aver_time_consu * (frame_num - 1) / frame_num + (t4 - t0) / frame_num;
+  runtime_counters_.lidar_update_calls++;
+  runtime_timing_.lidar_association_update_s += NativeElapsedSeconds(lidar_begin);
+  runtime_timing_.lidar_association_update_count++;
 
   // aver_time_icp = aver_time_icp * (frame_num - 1) / frame_num + (t2 - t1) / frame_num;
   // aver_time_map_inre = aver_time_map_inre * (frame_num - 1) / frame_num + (t4 - t3) / frame_num;
@@ -531,26 +618,115 @@ void LIVMapper::savePCD()
   }
 }
 
+void LIVMapper::writeRuntimeReports(const std::string &output_directory) const
+{
+  const std::string prefix = trajectory_output_path_.empty()
+                                 ? output_directory + "/trajectory.tum"
+                                 : trajectory_output_path_;
+  const std::filesystem::path prefix_path(prefix);
+  if (prefix_path.has_parent_path()) {
+    std::error_code error;
+    std::filesystem::create_directories(prefix_path.parent_path(), error);
+    if (error) {
+      ROS_ERROR("cannot create runtime report directory: %s",
+                error.message().c_str());
+      return;
+    }
+  }
+
+  const NativeVisualRuntimeCounters visual =
+      vio_manager ? vio_manager->runtime_counters()
+                  : NativeVisualRuntimeCounters();
+  const std::size_t final_visual_map_points =
+      vio_manager && vio_manager->visual_submap
+          ? vio_manager->visual_submap->voxel_points.size()
+          : 0;
+
+  std::ofstream counters(prefix + ".counters.yaml");
+  counters << "schema_version: 1\n"
+           << "imu_callbacks_received: "
+           << runtime_counters_.imu_callbacks_received << "\n"
+           << "lidar_callbacks_received: "
+           << runtime_counters_.lidar_callbacks_received << "\n"
+           << "image_callbacks_received: "
+           << runtime_counters_.image_callbacks_received << "\n"
+           << "imu_messages_enqueued: "
+           << runtime_counters_.imu_messages_enqueued << "\n"
+           << "lidar_messages_enqueued: "
+           << runtime_counters_.lidar_messages_enqueued << "\n"
+           << "image_messages_enqueued: "
+           << runtime_counters_.image_messages_enqueued << "\n"
+           << "ignored_input_messages: "
+           << runtime_counters_.ignored_input_messages << "\n"
+           << "scheduler_step_calls: "
+           << runtime_counters_.scheduler_step_calls << "\n"
+           << "scheduler_sync_packages: "
+           << runtime_counters_.scheduler_sync_packages << "\n"
+           << "lidar_epochs: " << runtime_counters_.lidar_epochs << "\n"
+           << "camera_epochs: " << runtime_counters_.camera_epochs << "\n"
+           << "imu_processing_calls: "
+           << runtime_counters_.imu_processing_calls << "\n"
+           << "lidar_update_calls: "
+           << runtime_counters_.lidar_update_calls << "\n"
+           << "map_query_calls: " << runtime_counters_.map_query_calls << "\n"
+           << "map_update_calls: " << runtime_counters_.map_update_calls << "\n"
+           << "visual_process_calls: "
+           << runtime_counters_.visual_process_calls << "\n"
+           << "visual_state_commits: "
+           << runtime_counters_.visual_state_commits << "\n"
+           << "trajectory_rows: " << runtime_counters_.trajectory_rows << "\n";
+
+  std::ofstream visual_output(prefix + ".visual_counters.yaml");
+  visual_output << "schema_version: 1\n"
+                << "camera_epochs: " << runtime_counters_.camera_epochs << "\n"
+                << "images_received: "
+                << runtime_counters_.image_messages_enqueued << "\n"
+                << "visual_process_calls: "
+                << runtime_counters_.visual_process_calls << "\n"
+                << "visual_state_commits: "
+                << runtime_counters_.visual_state_commits << "\n"
+                << "visual_points_created: " << visual.visual_points_created << "\n"
+                << "reference_patch_update_attempts: "
+                << visual.reference_patch_update_attempts << "\n"
+                << "reference_patch_updates_accepted: "
+                << visual.reference_patch_updates_accepted << "\n"
+                << "plane_queries: " << visual.plane_queries << "\n"
+                << "final_visual_map_points: " << final_visual_map_points << "\n";
+
+  std::ofstream timing(prefix + ".timing.yaml");
+  timing << "schema_version: 1\n"
+         << "input_preprocess_s: " << runtime_timing_.input_preprocess_s << "\n"
+         << "input_preprocess_count: "
+         << runtime_timing_.input_preprocess_count << "\n"
+         << "imu_s: " << runtime_timing_.imu_s << "\n"
+         << "imu_count: " << runtime_timing_.imu_count << "\n"
+         << "lidar_association_update_s: "
+         << runtime_timing_.lidar_association_update_s << "\n"
+         << "lidar_association_update_count: "
+         << runtime_timing_.lidar_association_update_count << "\n"
+         << "map_query_s: " << runtime_timing_.map_query_s << "\n"
+         << "map_query_count: " << runtime_timing_.map_query_count << "\n"
+         << "map_update_s: " << runtime_timing_.map_update_s << "\n"
+         << "map_update_count: " << runtime_timing_.map_update_count << "\n"
+         << "visual_processing_s: " << runtime_timing_.visual_processing_s << "\n"
+         << "visual_processing_count: "
+         << runtime_timing_.visual_processing_count << "\n"
+         << "estimator_compute_s: " << runtime_timing_.estimator_compute_s << "\n"
+         << "estimator_compute_count: "
+         << runtime_timing_.estimator_compute_count << "\n";
+}
+
 void LIVMapper::run() 
 {
   ros::Rate rate(5000);
   while (ros::ok()) 
   {
     ros::spinOnce();
-    if (!sync_packages(LidarMeasures)) 
-    {
-      rate.sleep();
-      continue;
-    }
-    handleFirstFrame();
-
-    processImu();
-
-    // if (!p_imu->imu_time_init) continue;
-
-    stateEstimationAndMapping();
+    if (!ProcessAvailableNativeEpochs()) rate.sleep();
   }
   savePCD();
+  if (!runtime_report_directory_.empty())
+    writeRuntimeReports(runtime_report_directory_);
 }
 
 void LIVMapper::prop_imu_once(StatesGroup &imu_prop_state, const double dt, V3D acc_avr, V3D angvel_avr)
@@ -702,7 +878,11 @@ void LIVMapper::RGBpointBodyLidarToIMU(PointType const *const pi, PointType *con
 
 void LIVMapper::standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
 {
-  if (!lidar_en) return;
+  runtime_counters_.lidar_callbacks_received++;
+  if (!lidar_en) {
+    runtime_counters_.ignored_input_messages++;
+    return;
+  }
   mtx_buffer.lock();
 
   double cur_head_time = msg->header.stamp.toSec() + lidar_time_offset;
@@ -714,10 +894,14 @@ void LIVMapper::standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
   }
   // ROS_INFO("get point cloud at time: %.6f", msg->header.stamp.toSec());
   PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
+  const auto preprocess_begin = NativeClock::now();
   p_pre->process(msg, ptr);
+  runtime_timing_.input_preprocess_s += NativeElapsedSeconds(preprocess_begin);
+  runtime_timing_.input_preprocess_count++;
   lid_raw_data_buffer.push_back(ptr);
   lid_header_time_buffer.push_back(cur_head_time);
   last_timestamp_lidar = cur_head_time;
+  runtime_counters_.lidar_messages_enqueued++;
 
   mtx_buffer.unlock();
   sig_buffer.notify_all();
@@ -725,7 +909,11 @@ void LIVMapper::standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
 void LIVMapper::livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg_in)
 {
-  if (!lidar_en) return;
+  runtime_counters_.lidar_callbacks_received++;
+  if (!lidar_en) {
+    runtime_counters_.ignored_input_messages++;
+    return;
+  }
   mtx_buffer.lock();
   livox_ros_driver::CustomMsg::Ptr msg(new livox_ros_driver::CustomMsg(*msg_in));
   // if ((abs(msg->header.stamp.toSec() - last_timestamp_lidar) > 0.2 && last_timestamp_lidar > 0) || sync_jump_flag)
@@ -750,10 +938,14 @@ void LIVMapper::livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg_i
   }
   // ROS_INFO("get point cloud at time: %.6f", msg->header.stamp.toSec());
   PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
+  const auto preprocess_begin = NativeClock::now();
   p_pre->process(msg, ptr);
+  runtime_timing_.input_preprocess_s += NativeElapsedSeconds(preprocess_begin);
+  runtime_timing_.input_preprocess_count++;
 
   if (!ptr || ptr->empty()) {
     ROS_ERROR("Received an empty point cloud");
+    runtime_counters_.ignored_input_messages++;
     mtx_buffer.unlock();
     return;
   }
@@ -761,6 +953,7 @@ void LIVMapper::livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg_i
   lid_raw_data_buffer.push_back(ptr);
   lid_header_time_buffer.push_back(cur_head_time);
   last_timestamp_lidar = cur_head_time;
+  runtime_counters_.lidar_messages_enqueued++;
 
   mtx_buffer.unlock();
   sig_buffer.notify_all();
@@ -768,9 +961,16 @@ void LIVMapper::livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg_i
 
 void LIVMapper::imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in)
 {
-  if (!imu_en) return;
+  runtime_counters_.imu_callbacks_received++;
+  if (!imu_en) {
+    runtime_counters_.ignored_input_messages++;
+    return;
+  }
 
-  if (last_timestamp_lidar < 0.0) return;
+  if (last_timestamp_lidar < 0.0) {
+    runtime_counters_.ignored_input_messages++;
+    return;
+  }
   // ROS_INFO("get imu at time: %.6f", msg_in->header.stamp.toSec());
   sensor_msgs::Imu::Ptr msg(new sensor_msgs::Imu(*msg_in));
   msg->header.stamp = ros::Time().fromSec(msg->header.stamp.toSec() - imu_time_offset);
@@ -788,6 +988,7 @@ void LIVMapper::imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in)
 
   if (last_timestamp_imu > 0.0 && timestamp < last_timestamp_imu)
   {
+    runtime_counters_.ignored_input_messages++;
     mtx_buffer.unlock();
     sig_buffer.notify_all();
     ROS_ERROR("imu loop back, offset: %lf \n", last_timestamp_imu - timestamp);
@@ -806,6 +1007,7 @@ void LIVMapper::imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in)
   last_timestamp_imu = timestamp;
 
   imu_buffer.push_back(msg);
+  runtime_counters_.imu_messages_enqueued++;
   // cout<<"got imu: "<<timestamp<<" imu size "<<imu_buffer.size()<<endl;
   mtx_buffer.unlock();
   if (imu_prop_enable)
@@ -828,7 +1030,11 @@ cv::Mat LIVMapper::getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg)
 
 void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
 {
-  if (!img_en) return;
+  runtime_counters_.image_callbacks_received++;
+  if (!img_en) {
+    runtime_counters_.ignored_input_messages++;
+    return;
+  }
   sensor_msgs::Image::Ptr msg(new sensor_msgs::Image(*msg_in));
   // if ((abs(msg->header.stamp.toSec() - last_timestamp_img) > 0.2 && last_timestamp_img > 0) || sync_jump_flag)
   // {
@@ -841,16 +1047,26 @@ void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
   if (hilti_en)
   {
     static int frame_counter = 0;
-    if (++frame_counter % 4 != 0) return;
+    if (++frame_counter % 4 != 0) {
+      runtime_counters_.ignored_input_messages++;
+      return;
+    }
   }
   // double msg_header_time =  msg->header.stamp.toSec();
   double msg_header_time = msg->header.stamp.toSec() + img_time_offset;
-  if (abs(msg_header_time - last_timestamp_img) < 0.001) return;
+  if (abs(msg_header_time - last_timestamp_img) < 0.001) {
+    runtime_counters_.ignored_input_messages++;
+    return;
+  }
   ROS_INFO("Get image, its header time: %.6f", msg_header_time);
-  if (last_timestamp_lidar < 0) return;
+  if (last_timestamp_lidar < 0) {
+    runtime_counters_.ignored_input_messages++;
+    return;
+  }
 
   if (msg_header_time < last_timestamp_img)
   {
+    runtime_counters_.ignored_input_messages++;
     ROS_ERROR("image loop back. \n");
     return;
   }
@@ -861,19 +1077,24 @@ void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
 
   if (img_time_correct - last_timestamp_img < 0.02)
   {
+    runtime_counters_.ignored_input_messages++;
     ROS_WARN("Image need Jumps: %.6f", img_time_correct);
     mtx_buffer.unlock();
     sig_buffer.notify_all();
     return;
   }
 
+  const auto preprocess_begin = NativeClock::now();
   cv::Mat img_cur = getImageFromMsg(msg);
+  runtime_timing_.input_preprocess_s += NativeElapsedSeconds(preprocess_begin);
+  runtime_timing_.input_preprocess_count++;
   img_buffer.push_back(img_cur);
   img_time_buffer.push_back(img_time_correct);
 
   // ROS_INFO("Correct Image time: %.6f", img_time_correct);
 
   last_timestamp_img = img_time_correct;
+  runtime_counters_.image_messages_enqueued++;
   // cv::imshow("img", img);
   // cv::waitKey(1);
   // cout<<"last_timestamp_img:::"<<last_timestamp_img<<endl;

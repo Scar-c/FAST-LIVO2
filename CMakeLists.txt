@@ -91,6 +91,7 @@ find_package(catkin REQUIRED COMPONENTS
   vikit_ros
   cv_bridge
   image_transport
+  rosbag
 )
 
 find_package(Eigen3 REQUIRED)
@@ -103,7 +104,7 @@ set(Sophus_LIBRARIES libSophus.so)
 
 # Define the catkin package
 catkin_package(
-  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy std_msgs message_runtime cv_bridge vikit_common vikit_ros image_transport
+  CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy std_msgs message_runtime cv_bridge vikit_common vikit_ros image_transport rosbag
   DEPENDS EIGEN3 PCL OpenCV Sophus
 )
 
@@ -124,8 +125,35 @@ add_library(pre src/preprocess.cpp)
 add_library(imu_proc src/IMU_Processing.cpp)
 add_library(laser_mapping src/LIVMapper.cpp)
 
+# The reader is transport-only.  It invokes the public callbacks and the one
+# shared scheduler step; no estimator or map algorithm is linked twice.
+add_library(native_offline_reader src/native_offline_reader.cpp)
+target_link_libraries(native_offline_reader ${catkin_LIBRARIES})
+
 # Add the main executable
 add_executable(fastlivo_mapping src/main.cpp)
+
+add_executable(fastlivo_native_offline tools/fastlivo_native_offline.cpp)
+target_link_libraries(fastlivo_native_offline
+  laser_mapping
+  native_offline_reader
+  vio
+  lio
+  pre
+  imu_proc
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Sophus_LIBRARIES}
+  ${Boost_LIBRARIES}
+)
+
+add_executable(native_offline_reader_tests tests/native_offline_reader_test.cpp)
+target_link_libraries(native_offline_reader_tests
+  native_offline_reader
+  ${catkin_LIBRARIES}
+)
+add_test(NAME native_offline_reader_tests COMMAND native_offline_reader_tests)
 
 # Link libraries to the executable
 target_link_libraries(fastlivo_mapping

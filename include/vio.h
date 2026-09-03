@@ -17,11 +17,20 @@ which is included as part of this source code package.
 #include "feature.h"
 #include <opencv2/imgproc/imgproc_c.h>
 #include <pcl/filters/voxel_grid.h>
+#include <cstdint>
 #include <set>
 #include <vikit/math_utils.h>
 #include <vikit/robust_cost.h>
 #include <vikit/vision.h>
 #include <vikit/pinhole_camera.h>
+
+struct NativeVisualRuntimeCounters
+{
+  std::uint64_t visual_points_created = 0;
+  std::uint64_t reference_patch_update_attempts = 0;
+  std::uint64_t reference_patch_updates_accepted = 0;
+  std::uint64_t plane_queries = 0;
+};
 
 struct SubSparseMap
 {
@@ -130,6 +139,7 @@ public:
   vector<pointWithVar> append_voxel_points;
   FramePtr new_frame_;
   cv::Mat img_cp, img_rgb, img_test;
+  NativeVisualRuntimeCounters runtime_counters_;
 
   enum CellType
   {
@@ -140,6 +150,10 @@ public:
 
   VIOManager();
   ~VIOManager();
+  const NativeVisualRuntimeCounters &runtime_counters() const
+  {
+    return runtime_counters_;
+  }
   void updateStateInverse(cv::Mat img, int level);
   void updateState(cv::Mat img, int level);
   void processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &feat_map, double img_time);

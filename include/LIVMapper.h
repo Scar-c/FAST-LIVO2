@@ -16,6 +16,8 @@ which is included as part of this source code package.
 #include "IMU_Processing.h"
 #include "vio.h"
 #include "preprocess.h"
+#include "native_runtime.h"
+#include <cstddef>
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 #include <nav_msgs/Path.h>
@@ -30,6 +32,12 @@ public:
   void initializeComponents();
   void initializeFiles();
   void run();
+  // The one production scheduler step used by both ROS and rosbag sources.
+  bool ProcessAvailableNativeEpochs();
+  std::size_t DrainAvailableNativeEpochs(std::size_t max_attempts = 100000);
+  void writeRuntimeReports(const std::string &output_directory) const;
+  const NativeRuntimeCounters &runtime_counters() const { return runtime_counters_; }
+  const NativeRuntimeTiming &runtime_timing() const { return runtime_timing_; }
   void gravityAlignment();
   void handleFirstFrame();
   void stateEstimationAndMapping();
@@ -57,6 +65,7 @@ public:
   void publish_mavros(const ros::Publisher &mavros_pose_publisher);
   void publish_path(const ros::Publisher pubPath);
   void readParameters(ros::NodeHandle &nh);
+  void writeTrajectoryPose(double timestamp);
   template <typename T> void set_posestamp(T &out);
   template <typename T> void pointBodyToWorld(const Eigen::Matrix<T, 3, 1> &pi, Eigen::Matrix<T, 3, 1> &po);
   template <typename T> Eigen::Matrix<T, 3, 1> pointBodyToWorld(const Eigen::Matrix<T, 3, 1> &pi);
@@ -123,6 +132,9 @@ public:
   deque<sensor_msgs::Imu::ConstPtr> imu_buffer;
   deque<cv::Mat> img_buffer;
   deque<double> img_time_buffer;
+  std::string trajectory_output_path_;
+  std::string runtime_report_directory_;
+  bool trajectory_output_initialized_ = false;
   vector<pointWithVar> _pv_list;
   vector<double> extrinT;
   vector<double> extrinR;
@@ -183,5 +195,7 @@ public:
   double aver_time_icp = 0;
   double aver_time_map_inre = 0;
   bool colmap_output_en = false;
+  NativeRuntimeCounters runtime_counters_;
+  NativeRuntimeTiming runtime_timing_;
 };
 #endif
