@@ -36,11 +36,12 @@ The exact Prompt 3 text is registered at
 The exact Prompt 4 text is registered at
 `prompts/prob_livo/prompt4_super_input_parity_eee01.md`.
 
-Current boundary: I0–I5 are closed/owner-verified; Prompt 8 closes I6 as
-`CLOSED/PASS — Owner audit pending` with camera-on visual activity and the
-visual-gate ablation complete. The H1 online/offline parity check is exact;
-the preferred regression path is now the project-owned offline runner. The
-I7 downsample ablation is cancelled and Super VoxelGridClosest remains frozen.
+Current boundary: I0–I5 are closed/owner-verified; Prompt 9 closes I6 as
+`CLOSED` after correcting the QR-native visual Jacobian, splitting geometry
+and uncertainty validity, removing repeated query eigensolvers, and passing
+the required normal-online/offline exact parity check. The preferred repeated
+regression path is the project-owned offline runner. The I7 downsample
+ablation is cancelled and Super VoxelGridClosest remains frozen.
 
 The complete Prompt 4 report is in
 `spec/prob_livo/PROMPT4_EVIDENCE.md`.

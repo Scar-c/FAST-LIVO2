@@ -507,3 +507,30 @@ The focused result is `[PASS] G-I6 visual plane gate policy and sensor-range
 oracle checks=14`; I1–I5 focused tests and the full CMake build also pass.
 I6 is `CLOSED/PASS — Owner audit pending`; I7 visual ablation is moved into
 I6, I7 downsample ablation is cancelled, and I8 is not started.
+
+## Prompt 9 Evidence
+
+Prompt 9 is registered at
+`prompts/prob_livo/prompt9_i6_corrective_closure.md`, SHA256
+`841faf3240c8e6ac43d38acfac60b1091520100864647bc51b88fc346c159a48`. The
+complete report is `spec/prob_livo/PROMPT9_EVIDENCE.md`.
+
+The corrective source changes are: QR-native `point_W` plane Jacobian;
+independent provider `geometry_valid`/`uncertainty_valid`; no repeated PSD
+eigensolver in the visual gate hot path; and exact no-cache closed-form
+support-radius lambda-max. The red independent oracle failed the former
+wrong-J implementation and passes after correction. The invalid-covariance
+fixture proves H1 fail-closed/H2 geometry-only behavior. G-I5 has 115 checks
+and G-I6 has 19 checks.
+
+Corrected H1 offline and normal-online runs both have 3979 rows, ATE
+`0.08795092773331592 m`, identical authority/visual counters, and identical
+trajectory SHA256
+`9939bb6bc4688d9685cc156e6a473e2f7413e79a15585b8f72aba7170184f53a`.
+The online runner records `one_callback_step=false` and uses normal
+`ros::spinOnce()`; no deterministic one-callback shim is used. H2 was rerun
+after radius cleanup and remains byte-identical to Prompt8 H2. The old
+Prompt8 H1 result is explicitly invalid for the probabilistic ablation.
+
+Prompt 9 final decision: `I6 CLOSED`. I7 downsample ablation remains
+cancelled and I8 has not started.

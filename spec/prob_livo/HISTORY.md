@@ -245,3 +245,43 @@ real visual activity; H0 has zero visual commits.
 I6 is `CLOSED/PASS — Owner audit pending`; I7 visual-gate ablation is
 complete inside I6, I7 downsample ablation is cancelled, and I8 is not
 started.
+
+## Prompt 9 / I6 corrective closure and normal online/offline parity
+
+Prompt 9 is registered at
+`prompts/prob_livo/prompt9_i6_corrective_closure.md` (SHA256
+`841faf3240c8e6ac43d38acfac60b1091520100864647bc51b88fc346c159a48`). It
+corrects the probabilistic visual plane residual to use the exact QR-native
+Jacobian `[point_W^T, 1]`, while preserving the FAST residual definition and
+the native point covariance term. An independent non-unit/nonparallel,
+non-cI covariance oracle kills the old `[normal^T, 1]` mutation; the old
+implementation failed this red test and the corrected code passes.
+
+`ProbPlaneProvider` now reports geometry and uncertainty independently. A
+geometry-valid/covariance-invalid fixture confirms H1 fails closed while H2
+continues to use the geometry. The visual gate no longer performs repeated
+PSD eigensolvers in its hot path, and the provider support radius uses an
+exact closed-form symmetric 3x3 lambda-max calculation with no cache. The
+radius error against the independent Eigen oracle is
+`5.551115123125783e-17`; the three corrected 1000-query measurements are
+`2.133600/2.519477/2.429241 ms`.
+
+The corrected H1 canonical offline run is
+`results/prob_livo/runs/prompt9_h1_prob3sigma_corrected_offline_retry2/`:
+3979 rows, 3326 matches, ATE `0.08795092773331592 m`, and trajectory SHA
+`9939bb6bc4688d9685cc156e6a473e2f7413e79a15585b8f72aba7170184f53a`. H2 was
+rerun after the radius change and remains byte-identical to Prompt8 H2:
+ATE `0.08793104514326024 m`, SHA
+`812d1bb9de1abeba0471632fa7515ee7afff682cbcad87bbab2786b109f5f6ca`.
+
+The required normal default ROS H1 run
+`results/prob_livo/runs/prompt9_h1_prob3sigma_corrected_normal_online/` uses
+the real subscriber queue and `ros::spinOnce()` with
+`one_callback_step=false`. It is byte-identical to corrected offline H1,
+with exact authority/visual counter equality and zero timestamp/field
+differences. The Prompt8 old H1 ATE `0.08862454637627792 m` is retained as
+historical evidence but is invalid for the probabilistic ablation because it
+used the wrong Jacobian.
+
+All I1–I6/P4 tests and the full build pass. I6 is now `CLOSED`; I7 downsample
+ablation remains cancelled and I8 is not started.

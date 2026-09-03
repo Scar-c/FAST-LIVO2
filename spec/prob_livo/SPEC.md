@@ -318,11 +318,11 @@ no reliance on old build/ or devel/
 | I3 | Prob-LIO P0–P4 backend, camera OFF + Super-input corrective | CLOSED / OWNER VERIFIED; `NUMERIC_IMPLEMENTATION_DIFFERENCE_CONFIRMED` |
 | I4 | `pointWithVar`-compatible current-scan adapter | CLOSED / OWNER VERIFIED |
 | I5 | `ProbPlaneProvider` | CLOSED/PASS — Owner audit pending |
-| I6 | camera ON / FAST-LIVO2 visual sequential closure + visual-gate ablation | CLOSED/PASS — Owner audit pending |
+| I6 | camera ON / FAST-LIVO2 visual sequential closure + visual-gate ablation | CLOSED |
 | I7 | downsample ablation | CANCELLED; Super VoxelGridClosest frozen |
 | I8 | generalization / multi-dataset validation | NOT STARTED |
 
-Prompt index names are P0–P8 but retain these I0–I8 semantics.
+Prompt index names are P0–P9 but retain these I0–I8 semantics.
 
 ## 10. Workspace and import policy
 
@@ -897,6 +897,27 @@ H2: 3979 rows, 3326 matches, ATE 0.08793104514326024 m,
     second gate 36817 pass / 3 reject
 ```
 
-I6 is `CLOSED/PASS — Owner audit pending`. I7 visual gate ablation is
-moved into I6; the I7 downsample ablation remains cancelled and I8 has not
-started.
+I6 is `CLOSED`; I7 visual gate ablation is complete inside I6. The I7
+downsample ablation remains cancelled and I8 has not started.
+
+## 21. Prompt 9 / I6 corrective closure
+
+Prompt 9 is registered at
+`prompts/prob_livo/prompt9_i6_corrective_closure.md`; its complete report is
+`spec/prob_livo/PROMPT9_EVIDENCE.md`.
+
+Prompt 9 corrected the QR-native visual plane Jacobian to
+`[point_W^T, 1]`, split provider geometry from uncertainty validity, removed
+the visual-gate hot-path PSD eigensolver, and replaced the I5 support-radius
+query eigensolver with an exact closed-form 3x3 symmetric lambda-max
+calculation without cache. The geometry-only/H1 fail-closed/H2 consume split
+is covered by adversarial fixtures. The corrected H1 ATE is
+`0.08795092773331592 m`; the rerun H2 is byte-identical to its Prompt8
+trajectory.
+
+The required default normal-online H1 and canonical offline H1 both produce
+3979 rows, identical authority and visual counters, and trajectory SHA256
+`9939bb6bc4688d9685cc156e6a473e2f7413e79a15585b8f72aba7170184f53a`.
+`one_callback_step=false` is recorded in the online run, and strict
+timestamp/field comparison is exact. I6 is therefore `CLOSED`; I7 downsample
+ablation remains cancelled and I8 remains not started.
