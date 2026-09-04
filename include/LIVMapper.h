@@ -35,6 +35,7 @@ public:
   // The one production scheduler step used by both ROS and rosbag sources.
   bool ProcessAvailableNativeEpochs();
   std::size_t DrainAvailableNativeEpochs(std::size_t max_attempts = 100000);
+  std::size_t DrainUnprocessableInputBuffers();
   bool NativeInputQueuesEmptyForDrain() const;
   void writeRuntimeReports(const std::string &output_directory) const;
   void writeProcessingCompleteSentinel(const std::string &output_directory,
@@ -141,6 +142,7 @@ public:
   std::string trajectory_output_path_;
   std::string runtime_report_directory_;
   bool trajectory_output_initialized_ = false;
+  std::uint64_t native_drain_discarded_messages_ = 0;
   vector<pointWithVar> _pv_list;
   vector<double> extrinT;
   vector<double> extrinR;

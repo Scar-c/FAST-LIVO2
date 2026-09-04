@@ -64,7 +64,23 @@ LIVMapper::~LIVMapper() {}
 bool LIVMapper::NativeInputQueuesEmptyForDrain() const
 {
   std::lock_guard<std::mutex> lock(mtx_buffer);
-  return lid_raw_data_buffer.empty() && img_buffer.empty() && !lidar_pushed;
+  return lid_raw_data_buffer.empty() && img_buffer.empty() &&
+         imu_buffer.empty() && !lidar_pushed;
+}
+
+std::size_t LIVMapper::DrainUnprocessableInputBuffers()
+{
+  std::lock_guard<std::mutex> lock(mtx_buffer);
+  const std::size_t discarded = lid_raw_data_buffer.size() +
+                                imu_buffer.size() + img_buffer.size();
+  lid_raw_data_buffer.clear();
+  lid_header_time_buffer.clear();
+  imu_buffer.clear();
+  img_buffer.clear();
+  img_time_buffer.clear();
+  lidar_pushed = false;
+  native_drain_discarded_messages_ += discarded;
+  return discarded;
 }
 
 void LIVMapper::readParameters(ros::NodeHandle &nh)
@@ -748,6 +764,8 @@ void LIVMapper::writeProcessingCompleteSentinel(
            << "input_queues_drained: "
            << (NativeInputQueuesEmptyForDrain() ? 1 : 0) << "\n"
            << "no_processable_epoch_remaining: 1\n"
+           << "discarded_unprocessable_messages: "
+           << native_drain_discarded_messages_ << "\n"
            << "expected_final_epoch_reached: "
            << (expected_final_epoch_reached ? 1 : 0) << "\n"
            << "trajectory_rows: " << runtime_counters_.trajectory_rows << "\n"
@@ -770,10 +788,9 @@ void LIVMapper::run()
       idle_attempts_after_eof = 0;
     } else {
       ros::param::get("~stop_after_input_drain", stop_after_input_drain);
-      if (stop_after_input_drain &&
-          ++idle_attempts_after_eof >= 16 &&
-          NativeInputQueuesEmptyForDrain()) {
-        break;
+      if (stop_after_input_drain && ++idle_attempts_after_eof >= 16) {
+        DrainUnprocessableInputBuffers();
+        if (NativeInputQueuesEmptyForDrain()) break;
       }
       rate.sleep();
     }

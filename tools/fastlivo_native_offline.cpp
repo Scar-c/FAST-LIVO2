@@ -100,6 +100,7 @@ int main(int argc, char **argv)
   if (!reader.run(options, dispatch)) return 1;
 
   const std::size_t drain_steps = mapper.DrainAvailableNativeEpochs();
+  mapper.DrainUnprocessableInputBuffers();
   mapper.savePCD();
   mapper.writeRuntimeReports(output_directory);
   WriteOfflineSourceReport(output_directory, reader.accounting(), drain_steps);
