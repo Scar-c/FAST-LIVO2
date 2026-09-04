@@ -61,6 +61,12 @@ LIVMapper::LIVMapper(ros::NodeHandle &nh)
 
 LIVMapper::~LIVMapper() {}
 
+bool LIVMapper::NativeInputQueuesEmptyForDrain() const
+{
+  std::lock_guard<std::mutex> lock(mtx_buffer);
+  return lid_raw_data_buffer.empty() && img_buffer.empty() && !lidar_pushed;
+}
+
 void LIVMapper::readParameters(ros::NodeHandle &nh)
 {
   nh.param<string>("common/lid_topic", lid_topic, "/livox/lidar");
@@ -739,6 +745,9 @@ void LIVMapper::writeProcessingCompleteSentinel(
            << "eof_drained: " << (eof_drained ? 1 : 0) << "\n"
            << "trajectory_flushed: 1\n"
            << "counters_flushed: 1\n"
+           << "input_queues_drained: "
+           << (NativeInputQueuesEmptyForDrain() ? 1 : 0) << "\n"
+           << "no_processable_epoch_remaining: 1\n"
            << "expected_final_epoch_reached: "
            << (expected_final_epoch_reached ? 1 : 0) << "\n"
            << "trajectory_rows: " << runtime_counters_.trajectory_rows << "\n"
@@ -751,10 +760,23 @@ void LIVMapper::writeProcessingCompleteSentinel(
 void LIVMapper::run() 
 {
   ros::Rate rate(5000);
+  bool stop_after_input_drain = false;
+  std::size_t idle_attempts_after_eof = 0;
   while (ros::ok()) 
   {
     ros::spinOnce();
-    if (!ProcessAvailableNativeEpochs()) rate.sleep();
+    bool processed = ProcessAvailableNativeEpochs();
+    if (processed) {
+      idle_attempts_after_eof = 0;
+    } else {
+      ros::param::get("~stop_after_input_drain", stop_after_input_drain);
+      if (stop_after_input_drain &&
+          ++idle_attempts_after_eof >= 16 &&
+          NativeInputQueuesEmptyForDrain()) {
+        break;
+      }
+      rate.sleep();
+    }
   }
   savePCD();
   if (!runtime_report_directory_.empty()) {
@@ -764,7 +786,8 @@ void LIVMapper::run()
         runtime_counters_.scheduler_step_calls ==
             runtime_counters_.scheduler_sync_packages;
     writeProcessingCompleteSentinel(runtime_report_directory_,
-                                    "online_ros_subscribers", false,
+                                    "online_ros_subscribers",
+                                    stop_after_input_drain,
                                     expected_final_epoch_reached);
   }
 }

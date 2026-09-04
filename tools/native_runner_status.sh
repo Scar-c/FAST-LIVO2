@@ -11,6 +11,8 @@ native_runner_complete_sentinel() {
   grep -qx 'processing_complete: 1' "$sentinel" || return 1
   grep -qx 'trajectory_flushed: 1' "$sentinel" || return 1
   grep -qx 'counters_flushed: 1' "$sentinel" || return 1
+  grep -qx 'input_queues_drained: 1' "$sentinel" || return 1
+  grep -qx 'no_processable_epoch_remaining: 1' "$sentinel" || return 1
   grep -qx 'expected_final_epoch_reached: 1' "$sentinel" || return 1
   if [[ "$require_eof" -eq 1 ]]; then
     grep -qx 'eof_drained: 1' "$sentinel" || return 1

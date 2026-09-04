@@ -35,6 +35,7 @@ public:
   // The one production scheduler step used by both ROS and rosbag sources.
   bool ProcessAvailableNativeEpochs();
   std::size_t DrainAvailableNativeEpochs(std::size_t max_attempts = 100000);
+  bool NativeInputQueuesEmptyForDrain() const;
   void writeRuntimeReports(const std::string &output_directory) const;
   void writeProcessingCompleteSentinel(const std::string &output_directory,
                                        const std::string &source,
@@ -75,7 +76,8 @@ public:
   template <typename T> Eigen::Matrix<T, 3, 1> pointBodyToWorld(const Eigen::Matrix<T, 3, 1> &pi);
   cv::Mat getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg);
 
-  std::mutex mtx_buffer, mtx_buffer_imu_prop;
+  mutable std::mutex mtx_buffer;
+  std::mutex mtx_buffer_imu_prop;
   std::condition_variable sig_buffer;
 
   SLAM_MODE slam_mode_;

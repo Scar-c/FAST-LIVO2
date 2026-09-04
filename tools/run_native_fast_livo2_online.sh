@@ -96,14 +96,22 @@ if [[ "$MODE" == "livo" ]]; then TOPICS+=(/left/image_raw); fi
 rosbag play "$BAG" --clock --rate "$RATE" --topics "${TOPICS[@]}" >"$RUN_DIR/play.log" 2>&1
 PLAY_RC=$?
 RUN_END=$(date +%s)
-sleep 3
-kill -INT "$NODE_PID" 2>/dev/null || true
+if [[ "$PLAY_RC" -eq 0 ]]; then
+  rosparam set /laserMapping/stop_after_input_drain true
+fi
+for _ in $(seq 1 900); do
+  if ! kill -0 "$NODE_PID" 2>/dev/null; then break; fi
+  sleep 1
+done
+if kill -0 "$NODE_PID" 2>/dev/null; then
+  kill -INT "$NODE_PID" 2>/dev/null || true
+fi
 wait "$NODE_PID" 2>/dev/null
 NODE_RC=$?
 NODE_PID=""
 
 RUN_STATUS="$(native_runner_classify "$NODE_RC" "$PLAY_RC" \
-  "$RUN_DIR/processing_complete.sentinel")"
+  "$RUN_DIR/processing_complete.sentinel" 1)"
 if [[ "$RUN_STATUS" == CLEAN_SUCCESS ||
       "$RUN_STATUS" == PROCESSING_COMPLETE_WITH_SHUTDOWN_FAULT ]]; then
   if [[ ! -s "$RUN_DIR/trajectory.tum" ||

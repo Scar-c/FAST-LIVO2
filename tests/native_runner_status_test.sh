@@ -28,6 +28,8 @@ processing_complete: 1
 eof_drained: 1
 trajectory_flushed: 1
 counters_flushed: 1
+input_queues_drained: 1
+no_processable_epoch_remaining: 1
 expected_final_epoch_reached: 1
 EOF
 
