@@ -31,10 +31,16 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm|aarch64|ARM|AARCH64)")
   add_definitions(-DARM_ARCH)
 else()
   # x86-64 (Intel/AMD) optimizations
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -mtune=native -funroll-loops") #-flto
-  message(STATUS "Using general x86 optimizations: -O3 -march=native -mtune=native -funroll-loops") 
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -mtune=native -mno-avx -funroll-loops") #-flto
+  message(STATUS "Using general x86 optimizations: -O3 -march=native -mtune=native -mno-avx -funroll-loops")
   add_definitions(-DX86_ARCH)
 endif()
+
+# Debian's PCL binaries are built with Eigen's 16-byte ABI.  -march=native
+# would otherwise select Eigen's 32-byte AVX allocator in this translation
+# unit.  -mno-avx preserves SSE vectorization and keeps allocator ownership
+# compatible with the system PCL binaries.
+add_definitions(-DEIGEN_MAX_ALIGN_BYTES=16)
 
 # Define project root directory
 add_definitions(-DROOT_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/\")
