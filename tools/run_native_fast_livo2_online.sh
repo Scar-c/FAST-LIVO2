@@ -45,6 +45,13 @@ cleanup() {
   [[ -n "$CORE_PID" ]] && kill "$CORE_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
+node_alive() {
+  [[ -n "$NODE_PID" ]] || return 1
+  kill -0 "$NODE_PID" 2>/dev/null || return 1
+  local state
+  state="$(ps -o stat= -p "$NODE_PID" 2>/dev/null || true)"
+  [[ "$state" != Z* ]]
+}
 
 MASTER_PORT=$((11311 + RANDOM % 200))
 export ROS_MASTER_URI="http://localhost:$MASTER_PORT"
@@ -100,10 +107,10 @@ if [[ "$PLAY_RC" -eq 0 ]]; then
   rosparam set /laserMapping/stop_after_input_drain true
 fi
 for _ in $(seq 1 900); do
-  if ! kill -0 "$NODE_PID" 2>/dev/null; then break; fi
+  if ! node_alive; then break; fi
   sleep 1
 done
-if kill -0 "$NODE_PID" 2>/dev/null; then
+if node_alive; then
   kill -INT "$NODE_PID" 2>/dev/null || true
 fi
 wait "$NODE_PID" 2>/dev/null
