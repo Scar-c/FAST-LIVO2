@@ -64,6 +64,14 @@ else()
   message(STATUS "Single core detected. Multithreading disabled.")
 endif()
 
+# Diagnostic-only signatures are compiled out of the normal production build.
+option(FAST_LIVO_NATIVE_DIAGNOSTICS
+       "Emit diagnostic-only native visual first-divergence signatures" OFF)
+if(FAST_LIVO_NATIVE_DIAGNOSTICS)
+  add_definitions(-DFAST_LIVO_NATIVE_DIAGNOSTICS)
+  message(STATUS "Native visual diagnostics enabled")
+endif()
+
 # Check for OpenMP support
 find_package(OpenMP QUIET)
 if(OpenMP_CXX_FOUND)
@@ -164,6 +172,17 @@ add_test(NAME native_runner_status_tests
   COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/native_runner_status_test.sh)
 add_test(NAME cached_mean_oracle_tests
   COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/cached_mean_oracle_test.sh)
+option(FAST_LIVO_SANITIZER_TESTS
+       "Build sanitizer-only native regression tests" OFF)
+if(FAST_LIVO_SANITIZER_TESTS)
+  add_executable(point_to_plane_init_tests tests/point_to_plane_init_test.cpp)
+  target_link_libraries(point_to_plane_init_tests ${catkin_LIBRARIES})
+  target_compile_options(point_to_plane_init_tests PRIVATE
+    -fsanitize=undefined -fno-sanitize-recover=all)
+  target_link_options(point_to_plane_init_tests PRIVATE
+    -fsanitize=undefined)
+  add_test(NAME point_to_plane_init_tests COMMAND point_to_plane_init_tests)
+endif()
 
 # Link libraries to the executable
 target_link_libraries(fastlivo_mapping

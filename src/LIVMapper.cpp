@@ -161,6 +161,9 @@ void LIVMapper::initializeComponents()
   vio_manager->exposure_estimate_en = exposure_estimate_en;
   vio_manager->colmap_output_en = colmap_output_en;
   vio_manager->initializeVIO();
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+  vio_manager->setNativeDiagnosticOutputDirectory(runtime_report_directory_);
+#endif
 
   p_imu->set_extrinsic(extT, extR);
   p_imu->set_gyr_cov_scale(V3D(gyr_cov, gyr_cov, gyr_cov));

@@ -18,7 +18,9 @@ which is included as part of this source code package.
 #include <opencv2/imgproc/imgproc_c.h>
 #include <pcl/filters/voxel_grid.h>
 #include <cstdint>
+#include <fstream>
 #include <set>
+#include <string>
 #include <vikit/math_utils.h>
 #include <vikit/robust_cost.h>
 #include <vikit/vision.h>
@@ -141,6 +143,12 @@ public:
   FramePtr new_frame_;
   cv::Mat img_cp, img_rgb, img_test;
   NativeVisualRuntimeCounters runtime_counters_;
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+  std::ofstream native_diagnostic_output_;
+  std::uint64_t native_diagnostic_epoch_ = 0;
+  double native_diagnostic_image_time_ = 0.0;
+  NativeVisualRuntimeCounters native_diagnostic_previous_counters_;
+#endif
 
   enum CellType
   {
@@ -151,6 +159,16 @@ public:
 
   VIOManager();
   ~VIOManager();
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+  void setNativeDiagnosticOutputDirectory(const std::string &directory);
+  void diagnosticBeginEpoch(double image_time, const StatesGroup &state,
+                            const std::vector<pointWithVar> &lidar_points);
+  void diagnosticAfterRetrieval();
+  void diagnosticOptimizer(int level, int iteration, int n_meas, double error,
+                           const char *branch, std::uint64_t hth_hash,
+                           std::uint64_t htz_hash);
+  void diagnosticAfterReferenceUpdate();
+#endif
   const NativeVisualRuntimeCounters &runtime_counters() const
   {
     return runtime_counters_;

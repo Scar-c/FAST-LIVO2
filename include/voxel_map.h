@@ -62,7 +62,7 @@ typedef struct PointToPlane
   int layer_;
   double d_;
   double eigen_value_;
-  bool is_valid_;
+  bool is_valid_ = false;
   float dis_to_plane_;
 } PointToPlane;
 

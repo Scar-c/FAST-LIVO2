@@ -12,6 +12,194 @@ which is included as part of this source code package.
 
 #include "vio.h"
 
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+#include <algorithm>
+#include <cstring>
+#include <filesystem>
+#endif
+
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+namespace {
+
+constexpr std::uint64_t kDiagnosticHashOffset = 1469598103934665603ULL;
+constexpr std::uint64_t kDiagnosticHashPrime = 1099511628211ULL;
+
+void DiagnosticHashBytes(std::uint64_t &hash, const void *data, std::size_t size)
+{
+  const auto *bytes = static_cast<const unsigned char *>(data);
+  for (std::size_t i = 0; i < size; ++i)
+  {
+    hash ^= bytes[i];
+    hash *= kDiagnosticHashPrime;
+  }
+}
+
+template <typename T>
+void DiagnosticHashValue(std::uint64_t &hash, const T &value)
+{
+  DiagnosticHashBytes(hash, &value, sizeof(value));
+}
+
+template <typename Derived>
+void DiagnosticHashEigen(std::uint64_t &hash,
+                         const Eigen::MatrixBase<Derived> &value)
+{
+  DiagnosticHashBytes(hash, value.derived().data(),
+                      sizeof(typename Derived::Scalar) * value.size());
+}
+
+std::uint64_t DiagnosticStateHash(const StatesGroup &state)
+{
+  std::uint64_t hash = kDiagnosticHashOffset;
+  DiagnosticHashEigen(hash, state.rot_end);
+  DiagnosticHashEigen(hash, state.pos_end);
+  DiagnosticHashEigen(hash, state.vel_end);
+  DiagnosticHashEigen(hash, state.bias_g);
+  DiagnosticHashEigen(hash, state.bias_a);
+  DiagnosticHashEigen(hash, state.gravity);
+  DiagnosticHashValue(hash, state.inv_expo_time);
+  return hash;
+}
+
+std::uint64_t DiagnosticCovarianceHash(const StatesGroup &state)
+{
+  std::uint64_t hash = kDiagnosticHashOffset;
+  DiagnosticHashEigen(hash, state.cov);
+  return hash;
+}
+
+void DiagnosticHashFeature(std::uint64_t &hash, const Feature *feature)
+{
+  const bool present = feature != nullptr;
+  DiagnosticHashValue(hash, present);
+  if (!present) return;
+  DiagnosticHashValue(hash, feature->id_);
+  DiagnosticHashValue(hash, feature->level_);
+  DiagnosticHashEigen(hash, feature->px_);
+  DiagnosticHashEigen(hash, feature->f_);
+}
+
+std::uint64_t DiagnosticVisualPointHash(const VisualPoint *point)
+{
+  std::uint64_t hash = kDiagnosticHashOffset;
+  const bool present = point != nullptr;
+  DiagnosticHashValue(hash, present);
+  if (!present) return hash;
+  DiagnosticHashEigen(hash, point->pos_);
+  DiagnosticHashEigen(hash, point->normal_);
+  DiagnosticHashValue(hash, point->is_converged_);
+  DiagnosticHashValue(hash, point->is_normal_initialized_);
+  DiagnosticHashValue(hash, point->has_ref_patch_);
+  DiagnosticHashValue(hash, point->obs_.size());
+  for (const Feature *feature : point->obs_) DiagnosticHashFeature(hash, feature);
+  DiagnosticHashFeature(hash, point->has_ref_patch_ ? point->ref_patch : nullptr);
+  return hash;
+}
+
+std::uint64_t DiagnosticInputHash(const std::vector<pointWithVar> &points)
+{
+  std::uint64_t hash = kDiagnosticHashOffset;
+  DiagnosticHashValue(hash, points.size());
+  for (const pointWithVar &point : points)
+  {
+    DiagnosticHashEigen(hash, point.point_b);
+    DiagnosticHashEigen(hash, point.point_i);
+    DiagnosticHashEigen(hash, point.point_w);
+    DiagnosticHashEigen(hash, point.var_nostate);
+    DiagnosticHashEigen(hash, point.body_var);
+    DiagnosticHashEigen(hash, point.var);
+    DiagnosticHashEigen(hash, point.point_crossmat);
+    DiagnosticHashEigen(hash, point.normal);
+  }
+  return hash;
+}
+
+std::uint64_t DiagnosticSelectedHash(const SubSparseMap &submap)
+{
+  std::uint64_t hash = kDiagnosticHashOffset;
+  DiagnosticHashValue(hash, submap.voxel_points.size());
+  for (std::size_t i = 0; i < submap.voxel_points.size(); ++i)
+  {
+    DiagnosticHashValue(hash, i);
+    DiagnosticHashValue(hash, submap.search_levels[i]);
+    DiagnosticHashValue(hash, submap.inv_expo_list[i]);
+    DiagnosticHashValue(hash, submap.propa_errors[i]);
+    DiagnosticHashFeature(hash, submap.voxel_points[i] &&
+                                   submap.voxel_points[i]->has_ref_patch_
+                               ? submap.voxel_points[i]->ref_patch
+                               : nullptr);
+    DiagnosticHashValue(hash, DiagnosticVisualPointHash(submap.voxel_points[i]));
+  }
+  return hash;
+}
+
+std::uint64_t DiagnosticSearchLevelHash(const SubSparseMap &submap)
+{
+  std::uint64_t hash = kDiagnosticHashOffset;
+  for (int level : submap.search_levels) DiagnosticHashValue(hash, level);
+  return hash;
+}
+
+std::uint64_t DiagnosticReferenceHash(const SubSparseMap &submap)
+{
+  std::uint64_t hash = kDiagnosticHashOffset;
+  for (const VisualPoint *point : submap.voxel_points)
+  {
+    if (point == nullptr || !point->has_ref_patch_ || point->ref_patch == nullptr)
+    {
+      DiagnosticHashValue(hash, -1);
+      continue;
+    }
+    DiagnosticHashValue(hash, point->ref_patch->id_);
+    DiagnosticHashValue(hash, point->ref_patch->level_);
+  }
+  return hash;
+}
+
+std::uint64_t DiagnosticVisualMapHash(
+    const std::unordered_map<VOXEL_LOCATION, VOXEL_POINTS *> &map)
+{
+  std::vector<std::uint64_t> entries;
+  entries.reserve(map.size());
+  for (const auto &entry : map)
+  {
+    std::uint64_t entry_hash = kDiagnosticHashOffset;
+    DiagnosticHashValue(entry_hash, entry.first.x);
+    DiagnosticHashValue(entry_hash, entry.first.y);
+    DiagnosticHashValue(entry_hash, entry.first.z);
+    if (entry.second != nullptr)
+    {
+      for (const VisualPoint *point : entry.second->voxel_points)
+      {
+        DiagnosticHashValue(entry_hash, DiagnosticVisualPointHash(point));
+      }
+    }
+    entries.push_back(entry_hash);
+  }
+  std::sort(entries.begin(), entries.end());
+  std::uint64_t hash = kDiagnosticHashOffset;
+  for (std::uint64_t entry : entries) DiagnosticHashValue(hash, entry);
+  return hash;
+}
+
+std::size_t DiagnosticObservationCount(
+    const std::unordered_map<VOXEL_LOCATION, VOXEL_POINTS *> &map)
+{
+  std::size_t count = 0;
+  for (const auto &entry : map)
+  {
+    if (entry.second == nullptr) continue;
+    for (const VisualPoint *point : entry.second->voxel_points)
+    {
+      if (point != nullptr) count += point->obs_.size();
+    }
+  }
+  return count;
+}
+
+}  // namespace
+#endif
+
 VIOManager::VIOManager()
 {
   // downSizeFilter.setLeafSize(0.2, 0.2, 0.2);
@@ -25,6 +213,94 @@ VIOManager::~VIOManager()
   for (auto& pair : feat_map) delete pair.second;
   feat_map.clear();
 }
+
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+void VIOManager::setNativeDiagnosticOutputDirectory(const std::string &directory)
+{
+  if (directory.empty()) return;
+  std::error_code error;
+  std::filesystem::create_directories(directory, error);
+  if (error) return;
+  native_diagnostic_output_.open(directory + "/native_visual_signatures.csv");
+  if (!native_diagnostic_output_) return;
+  native_diagnostic_output_
+      << "stage,epoch,timestamp,level,iteration,n_meas,error,state_hash,"
+         "covariance_hash,lidar_input_hash,visual_map_size,selected_count,"
+         "ordered_selected_hash,search_level_hash,reference_hash,"
+         "new_visual_points,observations_total,candidate_replacements,"
+         "reference_commits,visual_map_hash,final_map_size,compact_hth_hash,"
+         "compact_htz_hash,branch\n";
+}
+
+void VIOManager::diagnosticBeginEpoch(
+    double image_time, const StatesGroup &state,
+    const std::vector<pointWithVar> &lidar_points)
+{
+  if (!native_diagnostic_output_) return;
+  ++native_diagnostic_epoch_;
+  native_diagnostic_image_time_ = image_time;
+  native_diagnostic_previous_counters_ = runtime_counters_;
+  native_diagnostic_output_
+      << "S0," << native_diagnostic_epoch_ << "," << std::setprecision(17)
+      << image_time << ",-1,-1,0,0," << DiagnosticStateHash(state) << ","
+      << DiagnosticCovarianceHash(state) << ","
+      << DiagnosticInputHash(lidar_points) << "," << feat_map.size()
+      << ",0,0,0,0,0,0,0,0,0,0,0,0,0,0,entry\n";
+  native_diagnostic_output_.flush();
+}
+
+void VIOManager::diagnosticAfterRetrieval()
+{
+  if (!native_diagnostic_output_) return;
+  native_diagnostic_output_
+      << "S1," << native_diagnostic_epoch_ << "," << std::setprecision(17)
+      << native_diagnostic_image_time_ << ",-1,-1,0,0,0,0,0,"
+      << feat_map.size() << "," << total_points << ","
+      << DiagnosticSelectedHash(*visual_submap) << ","
+      << DiagnosticSearchLevelHash(*visual_submap) << ","
+      << DiagnosticReferenceHash(*visual_submap)
+      << ",0,0,0,0,0,0,0,0,after_retrieval\n";
+  native_diagnostic_output_.flush();
+}
+
+void VIOManager::diagnosticOptimizer(int level, int iteration, int n_meas,
+                                     double error, const char *branch,
+                                     std::uint64_t hth_hash,
+                                     std::uint64_t htz_hash)
+{
+  if (!native_diagnostic_output_) return;
+  native_diagnostic_output_
+      << "S2," << native_diagnostic_epoch_ << ",0," << level << ","
+      << iteration << "," << n_meas << "," << std::setprecision(17) << error
+      << "," << DiagnosticStateHash(*state) << ",0,0," << feat_map.size()
+      << "," << total_points << ",0,0,0,0,0,0,0,0,0,0," << hth_hash << ","
+      << htz_hash << "," << branch << "\n";
+  native_diagnostic_output_.flush();
+}
+
+void VIOManager::diagnosticAfterReferenceUpdate()
+{
+  if (!native_diagnostic_output_) return;
+  const auto delta = [](std::uint64_t after, std::uint64_t before) {
+    return after - before;
+  };
+  native_diagnostic_output_
+      << "S3," << native_diagnostic_epoch_ << "," << std::setprecision(17)
+      << (new_frame_ ? new_frame_->id_ : -1) << ",-1,-1,0,0,0,0,0,"
+      << feat_map.size() << "," << total_points << ",0,0,0,"
+      << delta(runtime_counters_.visual_points_created,
+               native_diagnostic_previous_counters_.visual_points_created)
+      << "," << DiagnosticObservationCount(feat_map) << ","
+      << delta(runtime_counters_.reference_patch_candidate_replacements,
+               native_diagnostic_previous_counters_
+                   .reference_patch_candidate_replacements)
+      << "," << delta(runtime_counters_.reference_patch_commits,
+                        native_diagnostic_previous_counters_.reference_patch_commits)
+      << "," << DiagnosticVisualMapHash(feat_map) << ","
+      << visual_submap->voxel_points.size() << ",0,0,after_reference_update\n";
+  native_diagnostic_output_.flush();
+}
+#endif
 
 void VIOManager::setImuToLidarExtrinsic(const V3D &transl, const M3D &rot)
 {
@@ -1505,12 +1781,29 @@ void VIOManager::updateStateInverse(cv::Mat img, int level)
 
     error = error / n_meas;
 
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+    const MatrixXd diagnostic_hth = H_sub.transpose() * H_sub;
+    const VectorXd diagnostic_htz = H_sub.transpose() * z;
+    const std::uint64_t diagnostic_hth_hash = [&]() {
+      std::uint64_t hash = kDiagnosticHashOffset;
+      DiagnosticHashEigen(hash, diagnostic_hth);
+      return hash;
+    }();
+    const std::uint64_t diagnostic_htz_hash = [&]() {
+      std::uint64_t hash = kDiagnosticHashOffset;
+      DiagnosticHashEigen(hash, diagnostic_htz);
+      return hash;
+    }();
+#endif
+
     compute_jacobian_time += omp_get_wtime() - t1;
 
     double t3 = omp_get_wtime();
 
+    const char *diagnostic_branch = "rollback";
     if (error <= last_error)
     {
+      diagnostic_branch = "accept";
       old_state = (*state);
       last_error = error;
 
@@ -1536,6 +1829,11 @@ void VIOManager::updateStateInverse(cv::Mat img, int level)
     }
 
     update_ekf_time += omp_get_wtime() - t3;
+
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+    diagnosticOptimizer(level, iteration, n_meas, error, diagnostic_branch,
+                         diagnostic_hth_hash, diagnostic_htz_hash);
+#endif
 
     if (iteration == max_iterations || EKF_end) break; 
   }
@@ -1658,7 +1956,22 @@ void VIOManager::updateState(cv::Mat img, int level)
     }
 
     error = error / n_meas;
-    
+
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+    const MatrixXd diagnostic_hth = H_sub.transpose() * H_sub;
+    const VectorXd diagnostic_htz = H_sub.transpose() * z;
+    const std::uint64_t diagnostic_hth_hash = [&]() {
+      std::uint64_t hash = kDiagnosticHashOffset;
+      DiagnosticHashEigen(hash, diagnostic_hth);
+      return hash;
+    }();
+    const std::uint64_t diagnostic_htz_hash = [&]() {
+      std::uint64_t hash = kDiagnosticHashOffset;
+      DiagnosticHashEigen(hash, diagnostic_htz);
+      return hash;
+    }();
+#endif
+
     compute_jacobian_time += omp_get_wtime() - t1;
 
     // printf("\nPYRAMID LEVEL %i\n---------------\n", level);
@@ -1669,8 +1982,10 @@ void VIOManager::updateState(cv::Mat img, int level)
 
     double t3 = omp_get_wtime();
 
+    const char *diagnostic_branch = "rollback";
     if (error <= last_error)
     {
+      diagnostic_branch = "accept";
       old_state = (*state);
       last_error = error;
 
@@ -1705,6 +2020,11 @@ void VIOManager::updateState(cv::Mat img, int level)
     }
 
     update_ekf_time += omp_get_wtime() - t3;
+
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+    diagnosticOptimizer(level, iteration, n_meas, error, diagnostic_branch,
+                         diagnostic_hth_hash, diagnostic_htz_hash);
+#endif
 
     if (iteration == max_iterations || EKF_end) break;
   }
@@ -1809,6 +2129,9 @@ void VIOManager::dumpDataForColmap()
 
 void VIOManager::processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &feat_map, double img_time)
 {
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+  diagnosticBeginEpoch(img_time, *state, pg);
+#endif
   if (width != img.cols || height != img.rows)
   {
     if (img.empty()) printf("[ VIO ] Empty Image!\n");
@@ -1828,6 +2151,10 @@ void VIOManager::processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unor
   double t1 = omp_get_wtime();
 
   retrieveFromVisualSparseMap(img, pg, feat_map);
+
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+  diagnosticAfterRetrieval();
+#endif
 
   double t2 = omp_get_wtime();
 
@@ -1850,6 +2177,10 @@ void VIOManager::processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unor
   double t6 = omp_get_wtime();
 
   updateReferencePatch(feat_map);
+
+#ifdef FAST_LIVO_NATIVE_DIAGNOSTICS
+  diagnosticAfterReferenceUpdate();
+#endif
 
   double t7 = omp_get_wtime();
   
