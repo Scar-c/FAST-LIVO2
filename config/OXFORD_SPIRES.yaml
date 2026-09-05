@@ -1,0 +1,105 @@
+# Oxford Spires shared benchmark configuration.  Sensor and visual fields are
+# from the FAST-LIVO2 Oxford authority (hku-mars issue 43); omitted native map
+# fields are made explicit at their upstream defaults for auditability.
+common:
+  lid_topic: "/hesai/pandar"
+  imu_topic: "/alphasense_driver_ros/imu"
+  img_topic: "/alphasense_driver_ros/cam0/debayered/image/compressed"
+  img_en: 1
+  lidar_en: 1
+  ros_driver_bug_fix: false
+
+time_offset:
+  lidar_time_offset: 0.0
+  imu_time_offset: 0.0
+  img_time_offset: 0.0
+  exposure_time_init: 0.0
+
+preprocess:
+  lidar_type: 5
+  scan_line: 64
+  timestamp_unit: 3
+  blind: 1.0
+  point_filter_num: 1
+  filter_size_surf: 0.1
+  feature_extract_enabled: false
+  hilti_en: false
+
+extrin_calib:
+  extrinsic_T: [-2.98737408e-03, -1.62174455e-02, 8.37937008e-02]
+  extrinsic_R: [-1.79010935e-02, -9.99839500e-01, 7.24771588e-04,
+                9.99839311e-01, -1.79003915e-02, 9.63774848e-04,
+                -9.50646466e-04, 7.41907749e-04, 9.99999273e-01]
+  Rcl: [0.009769443369467168, 0.9999460020163569, 0.0035427429705001123,
+        0.007671197638838445, 0.003467861351881818, -0.9999645627043141,
+        -0.9999228523756403, 0.009796274248324188, -0.007636904334543504]
+  Pcl: [0.00035060884033447846, -0.079574053851818,
+        -0.053826061545697405]
+
+imu:
+  imu_en: true
+  imu_int_frame: 1
+  acc_cov: 0.1
+  gyr_cov: 0.1
+  b_acc_cov: 0.0001
+  b_gyr_cov: 0.0001
+
+vio:
+  max_iterations: 5
+  outlier_threshold: 78
+  img_point_cov: 100
+  patch_size: 8
+  patch_pyrimid_level: 4
+  normal_en: true
+  raycast_en: false
+  inverse_composition_en: false
+  exposure_estimate_en: true
+  inv_expo_cov: 0.1
+
+lio:
+  max_iterations: 5
+  dept_err: 0.05
+  beam_err: 0.02
+  min_eigen_value: 0.0025
+  voxel_size: 0.5
+  max_layer: 1
+  max_points_num: 50
+  layer_init_num: [5, 5, 5, 5, 5]
+
+# Prob-only intrinsic map fields.  Native does not consume this namespace.
+prob_livo:
+  map_resolution: 0.5
+  voxel_size: 0.5
+  map_capacity: 100000000
+  visual_plane_gate: "livo2_prob_3sigma"
+
+local_map:
+  map_sliding_en: false
+  half_map_size: 100
+  sliding_thresh: 8
+
+uav:
+  imu_rate_odom: false
+  gravity_align_en: false
+
+publish:
+  dense_map_en: false
+  pub_effect_point_en: false
+  pub_plane_en: false
+  pub_scan_num: 1
+  blind_rgb_points: 0.0
+
+evo:
+  seq_name: "Oxford_Spires"
+  pose_output_en: true
+
+pcd_save:
+  pcd_save_en: false
+  type: 0
+  colmap_output_en: false
+  filter_size_pcd: 0.15
+  interval: -1
+
+image_save:
+  img_save_en: false
+  interval: 1

@@ -44,8 +44,16 @@ include(ProcessorCount)
 ProcessorCount(N)
 message(STATUS "Processor count: ${N}")
 
-# Set the number of cores for multithreading
-if(N GREATER 4)
+# Set the number of cores for multithreading.  Prompt15 uses the same explicit
+# four-core budget for Native and Prob; leaving this cache unset preserves the
+# historical host-sized default for other builds.
+set(FAST_LIVO_MP_PROC_NUM "" CACHE STRING
+    "Override FAST-LIVO OpenMP worker count (default: detected host count)")
+if(FAST_LIVO_MP_PROC_NUM)
+  set(PROC_NUM "${FAST_LIVO_MP_PROC_NUM}")
+  add_definitions(-DMP_EN -DMP_PROC_NUM=${PROC_NUM})
+  message(STATUS "OpenMP multithreading override. Cores: ${PROC_NUM}")
+elseif(N GREATER 4)
   math(EXPR PROC_NUM "${N}")
   add_definitions(-DMP_EN -DMP_PROC_NUM=${PROC_NUM})
   message(STATUS "OpenMP multithreading enabled. Cores: ${PROC_NUM}")
@@ -130,7 +138,10 @@ add_library(vio
 add_library(lio src/voxel_map.cpp)
 add_library(pre src/preprocess.cpp)
 add_library(imu_proc src/IMU_Processing.cpp)
-add_library(laser_mapping src/LIVMapper.cpp)
+add_library(laser_mapping
+  src/LIVMapper.cpp
+  src/prob_livo/benchmark_runtime.cpp
+)
 add_library(prob_livo_eskf
   src/prob_livo/prob_eskf19.cpp
   src/prob_livo/prob_imu_adapter.cpp

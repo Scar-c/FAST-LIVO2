@@ -93,14 +93,58 @@ bool ProbImuAdapter::AccumulateInitialization(const MeasureGroup &measure,
     if (!ToImuSample(imu_message, sample, message)) {
       return false;
     }
-    const double count = static_cast<double>(initialization_samples_);
-    mean_gyro_ = (mean_gyro_ * count + sample.angular_velocity) / (count + 1.0);
-    mean_acceleration_ =
-        (mean_acceleration_ * count + sample.acceleration) / (count + 1.0);
+    if (initialization_samples_ == 0) {
+      initialization_window_start_ = sample.timestamp;
+      if (options_.initialization_semantics ==
+          ImuInitializationSemantics::kFastLivo2Native) {
+        // FAST seeds each mean from the first sample, then includes that same
+        // sample in the N=1 recurrence below.
+        mean_gyro_ = sample.angular_velocity;
+        mean_acceleration_ = sample.acceleration;
+      }
+    }
+    if (options_.initialization_semantics ==
+        ImuInitializationSemantics::kFastLivo2Native) {
+      const double native_n = static_cast<double>(initialization_samples_ + 1);
+      mean_gyro_ += (sample.angular_velocity - mean_gyro_) / native_n;
+      mean_acceleration_ +=
+          (sample.acceleration - mean_acceleration_) / native_n;
+    } else {
+      const double count = static_cast<double>(initialization_samples_);
+      mean_gyro_ =
+          (mean_gyro_ * count + sample.angular_velocity) / (count + 1.0);
+      mean_acceleration_ =
+          (mean_acceleration_ * count + sample.acceleration) / (count + 1.0);
+    }
     ++initialization_samples_;
+    initialization_window_end_ = sample.timestamp;
     last_initialization_imu_ = sample;
   }
   return true;
+}
+
+void ProbImuAdapter::InitializeFastLivo2Native(
+    ProbESKF19 &filter, const ImuSample &last_imu) {
+  const double acceleration_norm = mean_acceleration_.norm();
+  imu_scale_ = options_.gravity_norm / acceleration_norm;
+  initial_gravity_ =
+      -mean_acceleration_ * options_.gravity_norm / acceleration_norm;
+  initial_rotation_.setIdentity();
+
+  filter.SetGravityNorm(options_.gravity_norm);
+  filter.SetImuScale(imu_scale_);
+  StatesGroup &state = filter.state();
+  state.rot_end.setIdentity();
+  state.pos_end.setZero();
+  state.vel_end.setZero();
+  state.bias_g.setZero();
+  state.bias_a.setZero();
+  state.gravity = initial_gravity_;
+  // FAST-LIVO2 IMU_init intentionally leaves the host P19 prior unchanged.
+
+  filter.ResetImuHistory();
+  filter.SeedImuHistory(last_imu);
+  initialized_ = true;
 }
 
 void ProbImuAdapter::InitializeFilter(ProbESKF19 &filter,
@@ -176,7 +220,12 @@ ProbImuAdapter::Result ProbImuAdapter::ProcessLioEpoch(
       // The canonical wrapper timestamps the initialized state at the last
       // IMU in the accepted scheduler measure, including samples beyond the
       // minimum when a packet crosses the 50-sample transition.
-      InitializeFilter(filter, last_initialization_imu_);
+      if (options_.initialization_semantics ==
+          ImuInitializationSemantics::kFastLivo2Native) {
+        InitializeFastLivo2Native(filter, last_initialization_imu_);
+      } else {
+        InitializeFilter(filter, last_initialization_imu_);
+      }
     }
     result.success = true;
     result.initialized = initialized_;

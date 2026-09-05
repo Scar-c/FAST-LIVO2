@@ -22,6 +22,7 @@ struct OfflineOptions {
   std::string lidar_topic;
   std::string imu_topic;
   std::string image_topic;
+  std::function<void(double)> sensor_progress;
   double start_offset = -1.0;
   double duration = -1.0;
 };
@@ -37,6 +38,8 @@ struct OfflineAccounting {
   double first_sensor_time = 0.0;
   double last_sensor_time = 0.0;
   double wall_processing_s = 0.0;
+  double image_decode_s = 0.0;
+  std::size_t image_decode_failures = 0;
   double sensor_duration_s = 0.0;
   double speed_factor = 0.0;
 };

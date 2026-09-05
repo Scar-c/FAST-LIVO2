@@ -34,6 +34,7 @@ ProbImuAdapter::Options MakeAdapterOptions(
   adapter_options.minimum_initialization_samples =
       options.minimum_initialization_samples;
   adapter_options.gravity_norm = options.gravity_norm;
+  adapter_options.initialization_semantics = options.initialization_semantics;
   adapter_options.lidar_to_imu_rotation = options.lidar_to_imu_rotation;
   adapter_options.lidar_to_imu_translation = options.lidar_to_imu_translation;
   adapter_options.lidar_to_robot_yaw = options.lidar_to_robot_yaw;
@@ -191,9 +192,14 @@ bool ProbLioBackend::ProcessImuInit(LidarMeasureGroup &measures,
   }
   ++counters_.successful_epochs;
   ++counters_.imu_init_epochs;
-  if (result.initialized && !lifecycle_.MarkFilterInitialized()) {
-    SetError("failed to hand off from IMU_INIT to MAP_INIT");
-    return false;
+  if (result.initialized) {
+    if (!lifecycle_.MarkFilterInitialized()) {
+      SetError("failed to hand off from IMU_INIT to MAP_INIT");
+      return false;
+    }
+    initialization_state_ = state_;
+    first_estimator_valid_epoch_ = epoch_end;
+    has_initialization_snapshot_ = true;
   }
   return true;
 }
@@ -551,6 +557,8 @@ void ProbLioBackend::BuildWorldScan() {
 
 void ProbLioBackend::AppendTrajectory(double timestamp) {
   if (!trajectory_.is_open()) return;
+  if (!std::isfinite(first_output_pose_epoch_))
+    first_output_pose_epoch_ = timestamp;
   Eigen::Quaterniond quaternion(state_.rot_end);
   quaternion.normalize();
   trajectory_ << std::setprecision(17) << timestamp << " " << state_.pos_end.x()

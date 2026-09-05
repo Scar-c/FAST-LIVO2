@@ -10,12 +10,16 @@ CATKIN_WS="${PROB_LIVO_CATKIN_WS:-$(cd "$REPO_ROOT/../.." && pwd)}"
 BAG="${1:-$REPO_ROOT/../../bag/NTU/eee_01/eee_01.bag}"
 RUN_ROOT="${PROB_LIVO_RUN_ROOT:-$REPO_ROOT/results/prob_livo/runs}"
 RUN_ID="${PROB_LIVO_RUN_ID:-run_offline_$(date +%Y%m%d_%H%M%S)}"
-CONFIG="$REPO_ROOT/config/NTU_VIRAL.yaml"
+CONFIG="${PROB_LIVO_CONFIG:-$REPO_ROOT/config/NTU_VIRAL.yaml}"
 CONFIG_OVERLAY="${PROB_LIVO_CONFIG_OVERLAY:-}"
 INPUT_SEMANTICS="${PROB_LIVO_INPUT_SEMANTICS:-fast_native}"
 CAMERA_MODE="${PROB_LIVO_CAMERA_MODE:-off}"
 VISUAL_GATE="${PROB_LIVO_VISUAL_PLANE_GATE:-livo2_prob_3sigma}"
 CAMERA_CONFIG="${PROB_LIVO_CAMERA_CONFIG:-$REPO_ROOT/config/camera_NTU_VIRAL.yaml}"
+CPUSET="${PROB_LIVO_CPUSET:-0,2,4,6}"
+WORKERS="${PROB_LIVO_WORKERS:-4}"
+DATASET_FAMILY="${PROB_LIVO_DATASET_FAMILY:-NTU}"
+GT_PATH="${PROB_LIVO_GT_PATH:-}"
 
 case "$CAMERA_MODE" in
   off|h0|h1|h2) ;;
@@ -93,6 +97,9 @@ rosparam set /prob_livo/visual_plane_gate "$VISUAL_GATE"
 rosparam set /common/prob_livo_trajectory_path "$RUN_DIR/trajectory.tum"
 rosparam set /imu/imu_en true
 rosparam set /evo/pose_output_en false
+rosparam set /pcd_save/pcd_save_en false
+rosparam set /image_save/img_save_en false
+rosparam set /publish/dense_map_en false
 rosparam dump "$RUN_DIR/effective_rosparams.yaml"
 
 {
@@ -116,32 +123,55 @@ rosparam dump "$RUN_DIR/effective_rosparams.yaml"
   echo "camera_config: $([[ "$CAMERA_MODE" == "off" ]] && echo none || echo "$CAMERA_CONFIG")"
   echo "input_semantics: $INPUT_SEMANTICS"
   echo "transport: in_process_rosbag_record_order"
-  echo "replayed_topics: /imu/imu,/os1_cloud_node1/points$([[ "$CAMERA_MODE" == "off" ]] || echo ,/left/image_raw)"
+  echo "dataset_family: $DATASET_FAMILY"
+  echo "logical_cpu_affinity: $CPUSET"
+  echo "worker_limit: $WORKERS"
+  echo "build_type: Release"
+  echo "build_flags: -O3 -march=native -mtune=native -funroll-loops FAST_LIVO_MP_PROC_NUM=4"
   echo "effective_rosparams: $RUN_DIR/effective_rosparams.yaml"
   echo "start_utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >"$RUN_DIR/meta.txt"
 
 RUN_START_EPOCH=$(date +%s)
 set +e
-rosrun fast_livo prob_livo_offline "$BAG" "$RUN_DIR" "$INPUT_SEMANTICS" \
+PROB_LIVO_WORKERS="$WORKERS" taskset -c "$CPUSET" \
+  rosrun fast_livo prob_livo_offline "$BAG" "$RUN_DIR" "$INPUT_SEMANTICS" \
   >"$RUN_DIR/node.log" 2>&1
 NODE_RC=$?
-set -e
 RUN_END_EPOCH=$(date +%s)
 
 COUNTERS_PATH="$RUN_DIR/trajectory.tum.counters.yaml"
 if [[ -s "$COUNTERS_PATH" ]]; then COUNTER_RC=0; else COUNTER_RC=2; fi
-python3 "$REPO_ROOT/eval/prob_livo/pose_bag_to_tum.py" \
-  --bag "$BAG" --topic /leica/pose/relative --output "$RUN_DIR/ground_truth.tum" \
-  >"$RUN_DIR/ground_truth.log" 2>&1
-GT_RC=$?
-if [[ -s "$RUN_DIR/trajectory.tum" && "$GT_RC" -eq 0 ]]; then
-  python3 "$REPO_ROOT/eval/prob_livo/eval_ntu_viral_official.py" \
-    "$RUN_DIR/trajectory.tum" "$RUN_DIR/ground_truth.tum" \
-    --out "$RUN_DIR/evaluation.yaml" >"$RUN_DIR/evaluation.log" 2>&1
-  EVAL_RC=$?
+if [[ "$DATASET_FAMILY" == "OXFORD" ]]; then
+  if [[ -s "$GT_PATH" ]]; then
+    cp "$GT_PATH" "$RUN_DIR/ground_truth.tum"
+    GT_RC=$?
+  else
+    GT_RC=2
+  fi
+  if [[ -s "$RUN_DIR/trajectory.tum" && "$GT_RC" -eq 0 ]]; then
+    python3 "$REPO_ROOT/eval/prob_livo/eval_tum_translation.py" \
+      "$RUN_DIR/trajectory.tum" "$RUN_DIR/ground_truth.tum" \
+      --frame body --max-diff 0.05 --out "$RUN_DIR/evaluation.txt" \
+      >"$RUN_DIR/evaluation.log" 2>&1
+    EVAL_RC=$?
+  else
+    EVAL_RC=2
+  fi
 else
-  EVAL_RC=2
+  python3 "$REPO_ROOT/eval/prob_livo/pose_bag_to_tum.py" \
+    --bag "$BAG" --topic /leica/pose/relative \
+    --output "$RUN_DIR/ground_truth.tum" \
+    >"$RUN_DIR/ground_truth.log" 2>&1
+  GT_RC=$?
+  if [[ -s "$RUN_DIR/trajectory.tum" && "$GT_RC" -eq 0 ]]; then
+    python3 "$REPO_ROOT/eval/prob_livo/eval_ntu_viral_official.py" \
+      "$RUN_DIR/trajectory.tum" "$RUN_DIR/ground_truth.tum" \
+      --out "$RUN_DIR/evaluation.yaml" >"$RUN_DIR/evaluation.log" 2>&1
+    EVAL_RC=$?
+  else
+    EVAL_RC=2
+  fi
 fi
 
 if [[ "$NODE_RC" -eq 0 && "$COUNTER_RC" -eq 0 && "$GT_RC" -eq 0 && \

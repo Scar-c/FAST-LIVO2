@@ -17,6 +17,7 @@ which is included as part of this source code package.
 #include "vio.h"
 #include "preprocess.h"
 #include "prob_livo/input_semantics.h"
+#include "prob_livo/benchmark_runtime.h"
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 #include <nav_msgs/Path.h>
@@ -35,6 +36,22 @@ public:
   void initializeComponents();
   void initializeFiles();
   void run();
+  bool ProcessAvailableBenchmarkEpoch();
+  std::size_t DrainAvailableBenchmarkEpochs(
+      std::size_t max_attempts = 100000);
+  std::size_t DrainUnprocessableInputBuffers();
+  bool InputQueuesEmptyForDrain() const;
+  void writeBenchmarkReports(const std::string &output_directory) const;
+  void writeProcessingCompleteSentinel(
+      const std::string &output_directory, const std::string &source,
+      bool eof_drained, bool expected_final_epoch_reached) const;
+  const prob_livo::BenchmarkRuntimeCounters &benchmark_runtime_counters()
+      const {
+    return benchmark_runtime_counters_;
+  }
+  const prob_livo::BenchmarkRuntimeTiming &benchmark_runtime_timing() const {
+    return benchmark_runtime_timing_;
+  }
   void gravityAlignment();
   void handleFirstFrame();
   void stateEstimationAndMapping();
@@ -69,7 +86,8 @@ public:
   template <typename T> Eigen::Matrix<T, 3, 1> pointBodyToWorld(const Eigen::Matrix<T, 3, 1> &pi);
   cv::Mat getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg);
 
-  std::mutex mtx_buffer, mtx_buffer_imu_prop;
+  mutable std::mutex mtx_buffer;
+  std::mutex mtx_buffer_imu_prop;
   std::condition_variable sig_buffer;
 
   SLAM_MODE slam_mode_;
@@ -177,11 +195,18 @@ public:
   double prob_livo_super_blind_ = 2.0;
   double prob_livo_super_maxrange_ = 150.0;
   int prob_livo_super_filter_rate_ = 3;
+  double prob_livo_map_resolution_ = 0.5;
+  double prob_livo_voxel_size_ = 0.5;
+  int prob_livo_map_capacity_ = 100000000;
   prob_livo::VisualPlaneGateMode prob_livo_visual_gate_mode_ =
       prob_livo::VisualPlaneGateMode::kLivo2Prob3sigma;
   std::string prob_livo_visual_gate_name_ = "livo2_prob_3sigma";
   std::string prob_livo_trajectory_path_;
+  std::string benchmark_report_directory_;
   std::unique_ptr<prob_livo::ProbLioBackend> prob_livo_backend_;
+  prob_livo::BenchmarkRuntimeCounters benchmark_runtime_counters_;
+  prob_livo::BenchmarkRuntimeTiming benchmark_runtime_timing_;
+  std::size_t benchmark_drain_discarded_messages_ = 0;
 
   ros::Publisher plane_pub;
   ros::Publisher voxel_pub;

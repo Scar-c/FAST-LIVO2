@@ -16,6 +16,18 @@ which is included as part of this source code package.
 #include "prob_livo/prob_lio_backend.h"
 #include <ros/callback_queue.h>
 
+#include <chrono>
+#include <filesystem>
+#include <iomanip>
+
+namespace {
+using BenchmarkClock = std::chrono::steady_clock;
+
+double BenchmarkElapsed(const BenchmarkClock::time_point &begin) {
+  return std::chrono::duration<double>(BenchmarkClock::now() - begin).count();
+}
+}  // namespace
+
 LIVMapper::LIVMapper(ros::NodeHandle &nh)
     : extT(0, 0, 0),
       extR(M3D::Identity())
@@ -94,6 +106,29 @@ LIVMapper::~LIVMapper() {
   }
 }
 
+bool LIVMapper::InputQueuesEmptyForDrain() const {
+  std::lock_guard<std::mutex> lock(mtx_buffer);
+  return lid_raw_data_buffer.empty() && img_buffer.empty() &&
+         imu_buffer.empty() && !lidar_pushed;
+}
+
+std::size_t LIVMapper::DrainUnprocessableInputBuffers() {
+  std::lock_guard<std::mutex> lock(mtx_buffer);
+  const std::size_t pending_lidar = lid_raw_data_buffer.size();
+  const std::size_t discarded = lid_raw_data_buffer.size() +
+                                imu_buffer.size() + img_buffer.size();
+  lid_raw_data_buffer.clear();
+  lid_header_time_buffer.clear();
+  imu_buffer.clear();
+  img_buffer.clear();
+  img_time_buffer.clear();
+  lidar_pushed = false;
+  benchmark_drain_discarded_messages_ += discarded;
+  if (prob_livo_backend_)
+    prob_livo_backend_->RecordSchedulerDiscardedLidar(pending_lidar);
+  return discarded;
+}
+
 void LIVMapper::readParameters(ros::NodeHandle &nh)
 {
   nh.param<string>("common/lid_topic", lid_topic, "/livox/lidar");
@@ -109,6 +144,8 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
                  prob_livo_one_callback_step_, false);
   nh.param<string>("common/prob_livo_trajectory_path",
                   prob_livo_trajectory_path_, "");
+  nh.param<string>("evo/runtime_report_directory",
+                   benchmark_report_directory_, "");
   std::string input_semantics_name;
   nh.param<string>("common/prob_livo_input_semantics", input_semantics_name,
                    "fast_native");
@@ -122,6 +159,11 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
                    150.0);
   nh.param<int>("prob_livo/super_filter_rate", prob_livo_super_filter_rate_,
                 3);
+  nh.param<double>("prob_livo/map_resolution", prob_livo_map_resolution_,
+                   0.5);
+  nh.param<double>("prob_livo/voxel_size", prob_livo_voxel_size_, 0.5);
+  nh.param<int>("prob_livo/map_capacity", prob_livo_map_capacity_,
+                100000000);
   nh.param<string>("prob_livo/visual_plane_gate", prob_livo_visual_gate_name_,
                    "livo2_prob_3sigma");
   if (prob_livo_visual_gate_name_ == "livo2_prob_3sigma")
@@ -140,8 +182,10 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
   }
   if (prob_livo_super_blind_ <= 0.0 ||
       prob_livo_super_maxrange_ <= prob_livo_super_blind_ ||
-      prob_livo_super_filter_rate_ <= 0) {
-    throw std::runtime_error("invalid Super NTU input semantics parameters");
+      prob_livo_super_filter_rate_ <= 0 ||
+      !(prob_livo_map_resolution_ > 0.0) ||
+      !(prob_livo_voxel_size_ > 0.0) || prob_livo_map_capacity_ <= 0) {
+    throw std::runtime_error("invalid Prob-LIVO input or map parameters");
   }
 
   nh.param<bool>("vio/normal_en", normal_en, true);
@@ -257,13 +301,24 @@ void LIVMapper::initializeComponents()
     if (slam_mode_ != ONLY_LIO && slam_mode_ != LIVO)
       throw std::runtime_error("Prob-LIO backend requires LiDAR and IMU");
     prob_livo::ProbLioBackend::Options options;
-    options.gravity_norm = 9.7946;
-    options.imu_gyro_variance = 0.1;
-    options.imu_accelerometer_variance = 0.1;
+    options.minimum_initialization_samples = imu_int_frame;
+    options.gravity_norm =
+        prob_livo_input_semantics_ == prob_livo::InputSemantics::kFastNative
+            ? G_m_s2
+            : 9.7946;
+    options.initialization_semantics =
+        prob_livo_input_semantics_ == prob_livo::InputSemantics::kFastNative
+            ? prob_livo::ImuInitializationSemantics::kFastLivo2Native
+            : prob_livo::ImuInitializationSemantics::kSuperLegacy;
+    options.imu_gyro_variance = gyr_cov;
+    options.imu_accelerometer_variance = acc_cov;
+    options.max_iterations = voxelmap_manager->config_setting_.max_iterations_;
     options.imu_gyro_bias_variance = 0.0001;
     options.imu_accelerometer_bias_variance = 0.0001;
-    options.map_resolution = voxelmap_manager->config_setting_.max_voxel_size_;
-    options.voxel_size = voxelmap_manager->config_setting_.max_voxel_size_;
+    options.map_resolution = prob_livo_map_resolution_;
+    options.map_capacity =
+        static_cast<std::size_t>(prob_livo_map_capacity_);
+    options.voxel_size = prob_livo_voxel_size_;
     options.lidar_depth_error = voxelmap_manager->config_setting_.dept_err_;
     options.lidar_beam_error_deg = voxelmap_manager->config_setting_.beam_err_;
     options.lidar_to_imu_rotation = extR;
@@ -386,14 +441,23 @@ void LIVMapper::stateEstimationAndMapping()
   {
     if (slam_mode_ == LIVO && LidarMeasures.lio_vio_flg == VIO)
     {
+      const auto visual_begin = BenchmarkClock::now();
       handleProbVio();
+      benchmark_runtime_timing_.visual_processing_s +=
+          BenchmarkElapsed(visual_begin);
+      ++benchmark_runtime_timing_.visual_processing_count;
     }
     else
     {
       const prob_livo::SchedulerMode mode =
           slam_mode_ == LIVO ? prob_livo::SchedulerMode::kLivo
                              : prob_livo::SchedulerMode::kOnlyLio;
-      if (prob_livo_backend_->ProcessEpoch(LidarMeasures, mode))
+      const auto backend_begin = BenchmarkClock::now();
+      const bool processed = prob_livo_backend_->ProcessEpoch(LidarMeasures, mode);
+      benchmark_runtime_timing_.prob_lio_backend_s +=
+          BenchmarkElapsed(backend_begin);
+      ++benchmark_runtime_timing_.prob_lio_backend_count;
+      if (processed)
         handleProbLio();
     }
     return;
@@ -408,6 +472,45 @@ void LIVMapper::stateEstimationAndMapping()
       handleLIO();
       break;
   }
+}
+
+bool LIVMapper::ProcessAvailableBenchmarkEpoch()
+{
+  const auto wall_begin = BenchmarkClock::now();
+  const double cpu_begin = prob_livo::ProcessCpuSeconds();
+  ++benchmark_runtime_counters_.scheduler_poll_calls;
+  if (!sync_packages(LidarMeasures)) return false;
+
+  ++benchmark_runtime_counters_.scheduler_step_calls;
+  ++benchmark_runtime_counters_.scheduler_sync_packages;
+  if (LidarMeasures.lio_vio_flg == VIO)
+    ++benchmark_runtime_counters_.camera_epochs;
+  else
+    ++benchmark_runtime_counters_.lidar_epochs;
+  handleFirstFrame();
+  processImu();
+  stateEstimationAndMapping();
+  benchmark_runtime_timing_.estimator_compute_s +=
+      BenchmarkElapsed(wall_begin);
+  benchmark_runtime_timing_.estimator_cpu_s +=
+      prob_livo::ProcessCpuSeconds() - cpu_begin;
+  ++benchmark_runtime_timing_.estimator_compute_count;
+  return true;
+}
+
+std::size_t LIVMapper::DrainAvailableBenchmarkEpochs(std::size_t max_attempts)
+{
+  std::size_t processed = 0;
+  std::size_t idle_attempts = 0;
+  for (std::size_t attempt = 0; attempt < max_attempts; ++attempt) {
+    if (ProcessAvailableBenchmarkEpoch()) {
+      ++processed;
+      idle_attempts = 0;
+    } else if (++idle_attempts >= 16) {
+      break;
+    }
+  }
+  return processed;
 }
 
 void LIVMapper::handleProbLio()
@@ -724,29 +827,211 @@ void LIVMapper::savePCD()
   }
 }
 
+void LIVMapper::writeBenchmarkReports(
+    const std::string &output_directory) const {
+  if (!prob_livo_backend_) return;
+  std::error_code error;
+  std::filesystem::create_directories(output_directory, error);
+  if (error) return;
+  const std::string prefix = prob_livo_trajectory_path_.empty()
+                                 ? output_directory + "/trajectory.tum"
+                                 : prob_livo_trajectory_path_;
+  const auto &backend = prob_livo_backend_->counters();
+  const VisualRuntimeCounters visual =
+      vio_manager ? vio_manager->visual_counters() : VisualRuntimeCounters();
+
+  std::ofstream counters(prefix + ".counters.yaml");
+  counters << "schema_version: 4\n"
+           << "imu_callbacks_received: "
+           << benchmark_runtime_counters_.imu_callbacks_received << "\n"
+           << "lidar_callbacks_received: "
+           << benchmark_runtime_counters_.lidar_callbacks_received << "\n"
+           << "image_callbacks_received: "
+           << benchmark_runtime_counters_.image_callbacks_received << "\n"
+           << "imu_messages_enqueued: "
+           << benchmark_runtime_counters_.imu_messages_enqueued << "\n"
+           << "lidar_messages_enqueued: "
+           << benchmark_runtime_counters_.lidar_messages_enqueued << "\n"
+           << "image_messages_enqueued: "
+           << benchmark_runtime_counters_.image_messages_enqueued << "\n"
+           << "ignored_input_messages: "
+           << benchmark_runtime_counters_.ignored_input_messages << "\n"
+           << "scheduler_step_calls: "
+           << benchmark_runtime_counters_.scheduler_step_calls << "\n"
+           << "scheduler_poll_calls: "
+           << benchmark_runtime_counters_.scheduler_poll_calls << "\n"
+           << "scheduler_sync_packages: "
+           << benchmark_runtime_counters_.scheduler_sync_packages << "\n"
+           << "lidar_epochs: " << benchmark_runtime_counters_.lidar_epochs
+           << "\n"
+           << "camera_epochs: " << benchmark_runtime_counters_.camera_epochs
+           << "\n"
+           << "backend_epochs_attempted: " << backend.backend_epochs_attempted
+           << "\n"
+           << "backend_epochs_success: " << backend.backend_epochs_success
+           << "\n"
+           << "backend_epochs_rejected: " << backend.backend_epochs_rejected
+           << "\n"
+           << "imu_init_epochs: " << backend.imu_init_epochs << "\n"
+           << "map_init_epochs: " << backend.map_init_epochs << "\n"
+           << "run_epochs: " << backend.run_epochs << "\n"
+           << "trajectory_rows: " << backend.trajectory_rows << "\n"
+           << "visual_process_calls: " << visual.visual_process_calls << "\n"
+           << "visual_state_commits: " << visual.visual_state_commits << "\n";
+
+  std::ofstream visual_output(prefix + ".visual_counters.yaml");
+  visual_output << "schema_version: 2\n"
+                << "camera_epochs: " << visual.camera_epochs << "\n"
+                << "images_received: " << visual.images_received << "\n"
+                << "visual_process_calls: " << visual.visual_process_calls
+                << "\n"
+                << "current_scan_candidates: "
+                << visual.current_scan_candidates << "\n"
+                << "current_scan_normal_valid: "
+                << visual.current_scan_normal_valid << "\n"
+                << "plane_queries: " << visual.plane_queries << "\n"
+                << "plane_geometry_valid: " << visual.plane_geometry_valid
+                << "\n"
+                << "plane_uncertainty_valid: "
+                << visual.plane_uncertainty_valid << "\n"
+                << "visual_points_created: " << visual.visual_points_created
+                << "\n"
+                << "reference_patch_update_attempts: "
+                << visual.reference_patch_update_attempts << "\n"
+                << "reference_patch_updates_accepted: "
+                << visual.reference_patch_updates_accepted << "\n"
+                << "photometric_update_attempts: "
+                << visual.photometric_update_attempts << "\n"
+                << "photometric_update_accepted: "
+                << visual.photometric_update_accepted << "\n"
+                << "visual_state_commits: " << visual.visual_state_commits
+                << "\n"
+                << "visual_rollbacks: " << visual.visual_rollbacks << "\n";
+
+  std::ofstream timing(prefix + ".timing.yaml");
+  timing << std::setprecision(17) << "schema_version: 2\n"
+         << "input_preprocess_s: "
+         << benchmark_runtime_timing_.input_preprocess_s << "\n"
+         << "input_preprocess_count: "
+         << benchmark_runtime_timing_.input_preprocess_count << "\n"
+         << "prob_lio_backend_s: "
+         << benchmark_runtime_timing_.prob_lio_backend_s << "\n"
+         << "prob_lio_backend_count: "
+         << benchmark_runtime_timing_.prob_lio_backend_count << "\n"
+         << "visual_processing_s: "
+         << benchmark_runtime_timing_.visual_processing_s << "\n"
+         << "visual_processing_count: "
+         << benchmark_runtime_timing_.visual_processing_count << "\n"
+         << "estimator_compute_s: "
+         << benchmark_runtime_timing_.estimator_compute_s << "\n"
+         << "estimator_cpu_s: "
+         << benchmark_runtime_timing_.estimator_cpu_s << "\n"
+         << "estimator_compute_count: "
+         << benchmark_runtime_timing_.estimator_compute_count << "\n";
+
+  std::ofstream init(prefix + ".init.yaml");
+  init << std::setprecision(17) << "schema_version: 1\n"
+       << "initialization_semantics: FAST_LIVO2_NATIVE\n"
+       << "first_lidar_timestamp: " << _first_lidar_time << "\n"
+       << "captured: "
+       << (prob_livo_backend_->has_initialization_snapshot() ? 1 : 0) << "\n";
+  if (prob_livo_backend_->has_initialization_snapshot()) {
+    const auto &adapter = prob_livo_backend_->imu_adapter();
+    const StatesGroup &state = prob_livo_backend_->initialization_state();
+    init << "init_imu_window_start: "
+         << adapter.initialization_window_start() << "\n"
+         << "init_imu_window_end: " << adapter.initialization_window_end()
+         << "\n"
+         << "init_imu_sample_count: " << adapter.initialization_samples()
+         << "\n"
+         << "first_estimator_valid_epoch: "
+         << prob_livo_backend_->first_estimator_valid_epoch() << "\n"
+         << "first_output_pose_epoch: "
+         << prob_livo_backend_->first_output_pose_epoch() << "\n";
+    const auto write_vector = [&init](const char *name, const auto &value) {
+      init << name << ": [" << value[0] << ", " << value[1] << ", "
+           << value[2] << "]\n";
+    };
+    init << "rotation_row_major: [";
+    for (int row = 0; row < 3; ++row)
+      for (int col = 0; col < 3; ++col)
+        init << (row || col ? ", " : "") << state.rot_end(row, col);
+    init << "]\n";
+    write_vector("position", state.pos_end);
+    write_vector("velocity", state.vel_end);
+    write_vector("gyro_bias", state.bias_g);
+    write_vector("accel_bias", state.bias_a);
+    write_vector("gravity", state.gravity);
+    init << "covariance_row_major: [";
+    for (int row = 0; row < DIM_STATE; ++row)
+      for (int col = 0; col < DIM_STATE; ++col)
+        init << (row || col ? ", " : "") << state.cov(row, col);
+    init << "]\n";
+  }
+}
+
+void LIVMapper::writeProcessingCompleteSentinel(
+    const std::string &output_directory, const std::string &source,
+    bool eof_drained, bool expected_final_epoch_reached) const {
+  std::ofstream sentinel(output_directory + "/processing_complete.sentinel");
+  if (!sentinel) return;
+  const std::size_t rows = prob_livo_backend_
+                               ? prob_livo_backend_->counters().trajectory_rows
+                               : 0;
+  sentinel << "schema_version: 1\n"
+           << "processing_complete: 1\n"
+           << "source: " << source << "\n"
+           << "eof_drained: " << (eof_drained ? 1 : 0) << "\n"
+           << "trajectory_flushed: 1\n"
+           << "counters_flushed: 1\n"
+           << "input_queues_drained: "
+           << (InputQueuesEmptyForDrain() ? 1 : 0) << "\n"
+           << "no_processable_epoch_remaining: 1\n"
+           << "discarded_unprocessable_messages: "
+           << benchmark_drain_discarded_messages_ << "\n"
+           << "expected_final_epoch_reached: "
+           << (expected_final_epoch_reached ? 1 : 0) << "\n"
+           << "trajectory_rows: " << rows << "\n"
+           << "scheduler_step_calls: "
+           << benchmark_runtime_counters_.scheduler_step_calls << "\n"
+           << "scheduler_sync_packages: "
+           << benchmark_runtime_counters_.scheduler_sync_packages << "\n";
+}
+
 void LIVMapper::run() 
 {
   ros::Rate rate(5000);
+  bool stop_after_input_drain = false;
+  std::size_t idle_attempts_after_eof = 0;
   while (ros::ok()) 
   {
     if (prob_livo_one_callback_step_)
       ros::getGlobalCallbackQueue()->callOne(ros::WallDuration(0));
     else
       ros::spinOnce();
-    if (!sync_packages(LidarMeasures)) 
-    {
+    if (ProcessAvailableBenchmarkEpoch()) {
+      idle_attempts_after_eof = 0;
+    } else {
+      ros::param::get("~stop_after_input_drain", stop_after_input_drain);
+      if (stop_after_input_drain && ++idle_attempts_after_eof >= 16) {
+        DrainUnprocessableInputBuffers();
+        if (InputQueuesEmptyForDrain()) break;
+      }
       rate.sleep();
-      continue;
     }
-    handleFirstFrame();
-
-    processImu();
-
-    // if (!p_imu->imu_time_init) continue;
-
-    stateEstimationAndMapping();
   }
   savePCD();
+  if (!benchmark_report_directory_.empty()) {
+    writeBenchmarkReports(benchmark_report_directory_);
+    const bool expected =
+        prob_livo_backend_ &&
+        prob_livo_backend_->counters().trajectory_rows > 0 &&
+        benchmark_runtime_counters_.scheduler_step_calls ==
+            benchmark_runtime_counters_.scheduler_sync_packages;
+    writeProcessingCompleteSentinel(benchmark_report_directory_,
+                                    "online_ros_subscribers",
+                                    stop_after_input_drain, expected);
+  }
 }
 
 void LIVMapper::prop_imu_once(StatesGroup &imu_prop_state, const double dt, V3D acc_avr, V3D angvel_avr)
@@ -898,7 +1183,11 @@ void LIVMapper::RGBpointBodyLidarToIMU(PointType const *const pi, PointType *con
 
 void LIVMapper::standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
 {
-  if (!lidar_en) return;
+  ++benchmark_runtime_counters_.lidar_callbacks_received;
+  if (!lidar_en) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
+    return;
+  }
   if (prob_livo_backend_) prob_livo_backend_->RecordLidarCallback();
   mtx_buffer.lock();
 
@@ -916,6 +1205,7 @@ void LIVMapper::standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
   }
   // ROS_INFO("get point cloud at time: %.6f", msg->header.stamp.toSec());
   PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
+  const auto preprocess_begin = BenchmarkClock::now();
   if (prob_livo_input_semantics_ ==
       prob_livo::InputSemantics::kSuperNtuLegacy) {
     p_pre->process_super_ntu_legacy(msg, ptr, prob_livo_super_blind_,
@@ -924,9 +1214,19 @@ void LIVMapper::standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
   } else {
     p_pre->process(msg, ptr);
   }
+  benchmark_runtime_timing_.input_preprocess_s +=
+      BenchmarkElapsed(preprocess_begin);
+  ++benchmark_runtime_timing_.input_preprocess_count;
+  if (!ptr || ptr->empty()) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
+    mtx_buffer.unlock();
+    sig_buffer.notify_all();
+    return;
+  }
   lid_raw_data_buffer.push_back(ptr);
   lid_header_time_buffer.push_back(cur_head_time);
   last_timestamp_lidar = cur_head_time;
+  ++benchmark_runtime_counters_.lidar_messages_enqueued;
 
   mtx_buffer.unlock();
   sig_buffer.notify_all();
@@ -934,7 +1234,11 @@ void LIVMapper::standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg)
 
 void LIVMapper::livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg_in)
 {
-  if (!lidar_en) return;
+  ++benchmark_runtime_counters_.lidar_callbacks_received;
+  if (!lidar_en) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
+    return;
+  }
   mtx_buffer.lock();
   livox_ros_driver::CustomMsg::Ptr msg(new livox_ros_driver::CustomMsg(*msg_in));
   // if ((abs(msg->header.stamp.toSec() - last_timestamp_lidar) > 0.2 && last_timestamp_lidar > 0) || sync_jump_flag)
@@ -959,9 +1263,14 @@ void LIVMapper::livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg_i
   }
   // ROS_INFO("get point cloud at time: %.6f", msg->header.stamp.toSec());
   PointCloudXYZI::Ptr ptr(new PointCloudXYZI());
+  const auto preprocess_begin = BenchmarkClock::now();
   p_pre->process(msg, ptr);
+  benchmark_runtime_timing_.input_preprocess_s +=
+      BenchmarkElapsed(preprocess_begin);
+  ++benchmark_runtime_timing_.input_preprocess_count;
 
   if (!ptr || ptr->empty()) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
     ROS_ERROR("Received an empty point cloud");
     mtx_buffer.unlock();
     return;
@@ -970,6 +1279,7 @@ void LIVMapper::livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg_i
   lid_raw_data_buffer.push_back(ptr);
   lid_header_time_buffer.push_back(cur_head_time);
   last_timestamp_lidar = cur_head_time;
+  ++benchmark_runtime_counters_.lidar_messages_enqueued;
 
   mtx_buffer.unlock();
   sig_buffer.notify_all();
@@ -977,11 +1287,18 @@ void LIVMapper::livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg_i
 
 void LIVMapper::imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in)
 {
-  if (!imu_en) return;
+  ++benchmark_runtime_counters_.imu_callbacks_received;
+  if (!imu_en) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
+    return;
+  }
 
   if (last_timestamp_lidar < 0.0 &&
       prob_livo_input_semantics_ != prob_livo::InputSemantics::kSuperNtuLegacy)
+  {
+    ++benchmark_runtime_counters_.ignored_input_messages;
     return;
+  }
   // ROS_INFO("get imu at time: %.6f", msg_in->header.stamp.toSec());
   sensor_msgs::Imu::Ptr msg(new sensor_msgs::Imu(*msg_in));
   msg->header.stamp = ros::Time().fromSec(msg->header.stamp.toSec() - imu_time_offset);
@@ -1001,6 +1318,7 @@ void LIVMapper::imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in)
 
   if (last_timestamp_imu > 0.0 && timestamp < last_timestamp_imu)
   {
+    ++benchmark_runtime_counters_.ignored_input_messages;
     mtx_buffer.unlock();
     sig_buffer.notify_all();
     ROS_ERROR("imu loop back, offset: %lf \n", last_timestamp_imu - timestamp);
@@ -1019,6 +1337,7 @@ void LIVMapper::imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in)
   last_timestamp_imu = timestamp;
 
   imu_buffer.push_back(msg);
+  ++benchmark_runtime_counters_.imu_messages_enqueued;
   // cout<<"got imu: "<<timestamp<<" imu size "<<imu_buffer.size()<<endl;
   mtx_buffer.unlock();
   if (imu_prop_enable)
@@ -1041,7 +1360,11 @@ cv::Mat LIVMapper::getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg)
 
 void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
 {
-  if (!img_en) return;
+  ++benchmark_runtime_counters_.image_callbacks_received;
+  if (!img_en) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
+    return;
+  }
   sensor_msgs::Image::Ptr msg(new sensor_msgs::Image(*msg_in));
   // if ((abs(msg->header.stamp.toSec() - last_timestamp_img) > 0.2 && last_timestamp_img > 0) || sync_jump_flag)
   // {
@@ -1054,16 +1377,26 @@ void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
   if (hilti_en)
   {
     static int frame_counter = 0;
-    if (++frame_counter % 4 != 0) return;
+    if (++frame_counter % 4 != 0) {
+      ++benchmark_runtime_counters_.ignored_input_messages;
+      return;
+    }
   }
   // double msg_header_time =  msg->header.stamp.toSec();
   double msg_header_time = msg->header.stamp.toSec() + img_time_offset;
-  if (abs(msg_header_time - last_timestamp_img) < 0.001) return;
+  if (abs(msg_header_time - last_timestamp_img) < 0.001) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
+    return;
+  }
   ROS_INFO("Get image, its header time: %.6f", msg_header_time);
-  if (last_timestamp_lidar < 0) return;
+  if (last_timestamp_lidar < 0) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
+    return;
+  }
 
   if (msg_header_time < last_timestamp_img)
   {
+    ++benchmark_runtime_counters_.ignored_input_messages;
     ROS_ERROR("image loop back. \n");
     return;
   }
@@ -1074,6 +1407,7 @@ void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
 
   if (img_time_correct - last_timestamp_img < 0.02)
   {
+    ++benchmark_runtime_counters_.ignored_input_messages;
     ROS_WARN("Image need Jumps: %.6f", img_time_correct);
     mtx_buffer.unlock();
     sig_buffer.notify_all();
@@ -1081,13 +1415,18 @@ void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
   }
 
   if (vio_manager) vio_manager->recordImageReceived();
+  const auto preprocess_begin = BenchmarkClock::now();
   cv::Mat img_cur = getImageFromMsg(msg);
+  benchmark_runtime_timing_.input_preprocess_s +=
+      BenchmarkElapsed(preprocess_begin);
+  ++benchmark_runtime_timing_.input_preprocess_count;
   img_buffer.push_back(img_cur);
   img_time_buffer.push_back(img_time_correct);
 
   // ROS_INFO("Correct Image time: %.6f", img_time_correct);
 
   last_timestamp_img = img_time_correct;
+  ++benchmark_runtime_counters_.image_messages_enqueued;
   // cv::imshow("img", img);
   // cv::waitKey(1);
   // cout<<"last_timestamp_img:::"<<last_timestamp_img<<endl;

@@ -12,7 +12,7 @@ BAG="${1:-$REPO_ROOT/../../bag/NTU/eee_01/eee_01.bag}"
 RUN_ROOT="${PROB_LIVO_RUN_ROOT:-$REPO_ROOT/results/prob_livo/runs}"
 RUN_ID="${PROB_LIVO_RUN_ID:-run_$(date +%Y%m%d_%H%M%S)}"
 RATE="${PROB_LIVO_BAG_RATE:-1.0}"
-CONFIG="$REPO_ROOT/config/NTU_VIRAL.yaml"
+CONFIG="${PROB_LIVO_CONFIG:-$REPO_ROOT/config/NTU_VIRAL.yaml}"
 CONFIG_OVERLAY="${PROB_LIVO_CONFIG_OVERLAY:-}"
 INPUT_SEMANTICS="${PROB_LIVO_INPUT_SEMANTICS:-fast_native}"
 CAMERA_MODE="${PROB_LIVO_CAMERA_MODE:-off}"
@@ -22,6 +22,8 @@ ONE_CALLBACK_STEP="${PROB_LIVO_ONE_CALLBACK_STEP:-false}"
 MEMORY_CSV="${PROB_LIVO_MEMORY_CSV:-}"
 MEMORY_LABEL="${PROB_LIVO_MEMORY_LABEL:-$CAMERA_MODE}"
 MEMORY_INTERVAL="${PROB_LIVO_MEMORY_INTERVAL:-2}"
+CPUSET="${PROB_LIVO_CPUSET:-0,2,4,6}"
+WORKERS="${PROB_LIVO_WORKERS:-4}"
 
 case "$CAMERA_MODE" in
   off|h0|h1|h2) ;;
@@ -105,7 +107,14 @@ rosparam set /prob_livo/visual_plane_gate "$VISUAL_GATE"
 rosparam set /common/prob_livo_trajectory_path "$RUN_DIR/trajectory.tum"
 rosparam set /imu/imu_en true
 rosparam set /evo/pose_output_en false
+rosparam set /evo/runtime_report_directory "$RUN_DIR"
+rosparam set /pcd_save/pcd_save_en false
+rosparam set /image_save/img_save_en false
+rosparam set /publish/dense_map_en false
 rosparam dump "$RUN_DIR/effective_rosparams.yaml"
+LIDAR_TOPIC="$(rosparam get /common/lid_topic)"
+IMU_TOPIC="$(rosparam get /common/imu_topic)"
+IMAGE_TOPIC="$(rosparam get /common/img_topic)"
 if [[ -n "$MEMORY_CSV" ]]; then
   mkdir -p "$(dirname "$MEMORY_CSV")"
 fi
@@ -134,14 +143,20 @@ fi
   echo "memory_csv: ${MEMORY_CSV:-none}"
   echo "memory_label: ${MEMORY_CSV:+$MEMORY_LABEL}"
   echo "memory_interval_seconds: ${MEMORY_CSV:+$MEMORY_INTERVAL}"
-  echo "replayed_topics: /imu/imu,/os1_cloud_node1/points$([[ "$CAMERA_MODE" == "off" ]] || echo ,/left/image_raw)"
+  echo "replayed_topics: $IMU_TOPIC,$LIDAR_TOPIC$([[ "$CAMERA_MODE" == "off" ]] || echo ,$IMAGE_TOPIC)"
+  echo "logical_cpu_affinity: $CPUSET"
+  echo "worker_limit: $WORKERS"
+  echo "build_type: Release"
+  echo "build_flags: -O3 -march=native -mtune=native -funroll-loops FAST_LIVO_MP_PROC_NUM=4"
   echo "bag_rate: $RATE"
   echo "ros_master_uri: $ROS_MASTER_URI"
   echo "effective_rosparams: $RUN_DIR/effective_rosparams.yaml"
   echo "start_utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >"$RUN_DIR/meta.txt"
 
-rosrun fast_livo fastlivo_mapping __name:=laserMapping >"$RUN_DIR/node.log" 2>&1 &
+PROB_LIVO_WORKERS="$WORKERS" taskset -c "$CPUSET" \
+  rosrun fast_livo fastlivo_mapping __name:=laserMapping \
+  >"$RUN_DIR/node.log" 2>&1 &
 NODE_PID=$!
 sleep 3
 if ! kill -0 "$NODE_PID" 2>/dev/null; then
@@ -156,14 +171,22 @@ if [[ -n "$MEMORY_CSV" ]]; then
 fi
 
 RUN_START_EPOCH=$(date +%s)
-TOPICS=(/imu/imu /os1_cloud_node1/points)
-if [[ "$CAMERA_MODE" != "off" ]]; then TOPICS+=(/left/image_raw); fi
+TOPICS=("$IMU_TOPIC" "$LIDAR_TOPIC")
+if [[ "$CAMERA_MODE" != "off" ]]; then TOPICS+=("$IMAGE_TOPIC"); fi
 rosbag play "$BAG" --clock --rate "$RATE" --topics \
   "${TOPICS[@]}" >"$RUN_DIR/play.log" 2>&1
 PLAY_RC=$?
 RUN_END_EPOCH=$(date +%s)
-sleep 3
-kill -INT "$NODE_PID" 2>/dev/null || true
+if [[ "$PLAY_RC" -eq 0 ]]; then
+  rosparam set /laserMapping/stop_after_input_drain true
+fi
+for _ in $(seq 1 900); do
+  if ! kill -0 "$NODE_PID" 2>/dev/null; then break; fi
+  sleep 1
+done
+if kill -0 "$NODE_PID" 2>/dev/null; then
+  kill -INT "$NODE_PID" 2>/dev/null || true
+fi
 wait "$NODE_PID" 2>/dev/null
 NODE_RC=$?
 NODE_PID=""

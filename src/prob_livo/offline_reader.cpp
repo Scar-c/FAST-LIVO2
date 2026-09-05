@@ -5,8 +5,12 @@
 #include <exception>
 #include <vector>
 
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/imgcodecs.hpp>
 #include <rosbag/bag.h>
 #include <rosbag/view.h>
+#include <sensor_msgs/CompressedImage.h>
+#include <sensor_msgs/image_encodings.h>
 
 namespace prob_livo {
 
@@ -25,6 +29,18 @@ void RecordSensorTime(const Message &message, OfflineAccounting &accounting) {
     accounting.first_sensor_time = timestamp;
   }
   accounting.last_sensor_time = timestamp;
+}
+
+sensor_msgs::ImagePtr DecodeCompressedImage(
+    const sensor_msgs::CompressedImage::ConstPtr &compressed) {
+  if (!compressed || compressed->data.empty()) return {};
+  const cv::Mat encoded(1, static_cast<int>(compressed->data.size()), CV_8UC1,
+                        const_cast<unsigned char *>(compressed->data.data()));
+  const cv::Mat decoded = cv::imdecode(encoded, cv::IMREAD_COLOR);
+  if (decoded.empty()) return {};
+  return cv_bridge::CvImage(compressed->header,
+                            sensor_msgs::image_encodings::BGR8, decoded)
+      .toImageMsg();
 }
 
 }  // namespace
@@ -87,18 +103,31 @@ bool OfflineReader::run(const OfflineOptions &options,
       if (message) {
         ++accounting_.imu_read;
         RecordSensorTime(*message, accounting_);
+        if (options.sensor_progress)
+          options.sensor_progress(message->header.stamp.toSec());
         dispatch.on_imu(message);
         dispatch.step();
         continue;
       }
     }
 
-    if (!options.image_topic.empty() && topic == options.image_topic &&
-        datatype == "sensor_msgs/Image") {
-      const auto message = instance.instantiate<sensor_msgs::Image>();
+    if (!options.image_topic.empty() && topic == options.image_topic) {
+      sensor_msgs::ImageConstPtr message;
+      if (datatype == "sensor_msgs/Image") {
+        message = instance.instantiate<sensor_msgs::Image>();
+      } else if (datatype == "sensor_msgs/CompressedImage") {
+        const auto compressed =
+            instance.instantiate<sensor_msgs::CompressedImage>();
+        const double decode_begin = WallTimeSeconds();
+        message = DecodeCompressedImage(compressed);
+        accounting_.image_decode_s += WallTimeSeconds() - decode_begin;
+        if (!message) ++accounting_.image_decode_failures;
+      }
       if (message) {
         ++accounting_.image_read;
         RecordSensorTime(*message, accounting_);
+        if (options.sensor_progress)
+          options.sensor_progress(message->header.stamp.toSec());
         dispatch.on_image(message);
         dispatch.step();
         continue;
@@ -110,6 +139,8 @@ bool OfflineReader::run(const OfflineOptions &options,
       if (message) {
         ++accounting_.lidar_read;
         RecordSensorTime(*message, accounting_);
+        if (options.sensor_progress)
+          options.sensor_progress(message->header.stamp.toSec());
         if (dispatch.on_lidar_pc2) dispatch.on_lidar_pc2(message);
         dispatch.step();
         continue;
@@ -123,6 +154,8 @@ bool OfflineReader::run(const OfflineOptions &options,
       if (message) {
         ++accounting_.lidar_read;
         RecordSensorTime(*message, accounting_);
+        if (options.sensor_progress)
+          options.sensor_progress(message->header.stamp.toSec());
         if (dispatch.on_lidar_livox) dispatch.on_lidar_livox(message);
         dispatch.step();
         continue;
@@ -143,10 +176,12 @@ bool OfflineReader::run(const OfflineOptions &options,
 
   std::printf(
       "[Prob-LIVO OfflineReader] view %.3fs..%.3fs lidar=%zu imu=%zu image=%zu "
-      "other=%zu wall=%.3fs sensor=%.3fs speed=%.3fx\n",
+      "other=%zu wall=%.3fs decode=%.3fs decode_failures=%zu sensor=%.3fs "
+      "speed=%.3fx\n",
       view_begin, view_end, accounting_.lidar_read, accounting_.imu_read,
       accounting_.image_read, accounting_.other_messages,
-      accounting_.wall_processing_s,
+      accounting_.wall_processing_s, accounting_.image_decode_s,
+      accounting_.image_decode_failures,
       accounting_.sensor_duration_s, accounting_.speed_factor);
   return true;
 }

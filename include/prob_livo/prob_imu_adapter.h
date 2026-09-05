@@ -6,10 +6,16 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
 namespace prob_livo {
+
+enum class ImuInitializationSemantics {
+  kSuperLegacy,
+  kFastLivo2Native,
+};
 
 enum class SchedulerMode { kOnlyLio, kLivo };
 
@@ -49,6 +55,8 @@ class ProbImuAdapter {
   struct Options {
     int minimum_initialization_samples = 50;
     double gravity_norm = 9.7946;
+    ImuInitializationSemantics initialization_semantics =
+        ImuInitializationSemantics::kSuperLegacy;
     Eigen::Matrix3d lidar_to_imu_rotation = Eigen::Matrix3d::Identity();
     Eigen::Vector3d lidar_to_imu_translation = Eigen::Vector3d::Zero();
     Eigen::Matrix3d lidar_to_robot_yaw = Eigen::Matrix3d::Identity();
@@ -84,6 +92,10 @@ class ProbImuAdapter {
   int initialization_samples() const { return initialization_samples_; }
   const Eigen::Vector3d &mean_gyro() const { return mean_gyro_; }
   const Eigen::Vector3d &mean_acceleration() const { return mean_acceleration_; }
+  double initialization_window_start() const {
+    return initialization_window_start_;
+  }
+  double initialization_window_end() const { return initialization_window_end_; }
   double imu_scale() const { return imu_scale_; }
   const Eigen::Vector3d &initial_gravity() const { return initial_gravity_; }
   const Eigen::Matrix3d &initial_rotation() const { return initial_rotation_; }
@@ -101,6 +113,8 @@ class ProbImuAdapter {
   bool AccumulateInitialization(const MeasureGroup &measure,
                                 std::string &message);
   void InitializeFilter(ProbESKF19 &filter, const ImuSample &last_imu);
+  void InitializeFastLivo2Native(ProbESKF19 &filter,
+                                const ImuSample &last_imu);
   bool Undistort(const LidarMeasureGroup &measures, const EpochTiming &timing,
                 const ProbESKF19 &filter, PointCloudXYZI &output,
                 std::string &message) const;
@@ -108,6 +122,10 @@ class ProbImuAdapter {
   Options options_;
   bool initialized_ = false;
   int initialization_samples_ = 0;
+  double initialization_window_start_ =
+      std::numeric_limits<double>::quiet_NaN();
+  double initialization_window_end_ =
+      std::numeric_limits<double>::quiet_NaN();
   Eigen::Vector3d gyro_sum_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d acceleration_sum_ = Eigen::Vector3d::Zero();
   Eigen::Vector3d mean_gyro_ = Eigen::Vector3d::Zero();

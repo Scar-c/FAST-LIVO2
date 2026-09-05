@@ -120,6 +120,65 @@ int RunI2InitializationTests(TestContext &context) {
                 "split initialization did not transition on sample 50");
   context.Check(std::abs(filter.current_time() - 150.49) < 1e-12,
                 "split initialization timestamp did not use sample 50");
+
+  prob_livo::ProbImuAdapter::Options fast_options;
+  fast_options.minimum_initialization_samples = 3;
+  fast_options.gravity_norm = G_m_s2;
+  fast_options.initialization_semantics =
+      prob_livo::ImuInitializationSemantics::kFastLivo2Native;
+  prob_livo::ProbImuAdapter fast_adapter(fast_options);
+  StatesGroup fast_host;
+  const auto prior = fast_host.cov;
+  prob_livo::Options fast_filter_options;
+  fast_filter_options.gravity_norm = G_m_s2;
+  prob_livo::ProbESKF19 fast_filter(fast_host, fast_filter_options);
+  const auto fast_samples = std::vector<prob_livo::ImuSample>{
+      HostImu(400.00, Eigen::Vector3d(0.8, 0.1, -9.6),
+              Eigen::Vector3d(0.01, 0.02, 0.03)),
+      HostImu(400.01, Eigen::Vector3d(1.0, -0.1, -9.4),
+              Eigen::Vector3d(0.02, 0.01, 0.04)),
+      HostImu(400.02, Eigen::Vector3d(0.9, 0.0, -9.5),
+              Eigen::Vector3d(0.03, 0.00, 0.02))};
+  LidarMeasureGroup fast_packet =
+      MakeEpoch(400.0, 400.02, 400.0, fast_samples, {});
+  const auto fast_result = fast_adapter.ProcessLioEpoch(
+      fast_packet, fast_filter, prob_livo::SchedulerMode::kOnlyLio);
+  Eigen::Vector3d native_mean_acc = fast_samples.front().acceleration;
+  Eigen::Vector3d native_mean_gyro = fast_samples.front().angular_velocity;
+  int native_n = 1;
+  for (const auto &sample : fast_samples) {
+    native_mean_acc += (sample.acceleration - native_mean_acc) / native_n;
+    native_mean_gyro +=
+        (sample.angular_velocity - native_mean_gyro) / native_n;
+    ++native_n;
+  }
+  const Eigen::Vector3d native_gravity =
+      -native_mean_acc / native_mean_acc.norm() * G_m_s2;
+  context.Check(fast_result.success && fast_result.initialized,
+                "FAST-native initialization did not complete");
+  CheckVector3(context, native_mean_acc, fast_adapter.mean_acceleration(),
+               "p15.fast_init.mean_acc", 1e-15);
+  CheckVector3(context, native_mean_gyro, fast_adapter.mean_gyro(),
+               "p15.fast_init.mean_gyro", 1e-15);
+  CheckMatrix3(context, Eigen::Matrix3d::Identity(), fast_host.rot_end,
+               "p15.fast_init.rotation", 1e-15);
+  CheckVector3(context, Eigen::Vector3d::Zero(), fast_host.pos_end,
+               "p15.fast_init.position", 1e-15);
+  CheckVector3(context, Eigen::Vector3d::Zero(), fast_host.vel_end,
+               "p15.fast_init.velocity", 1e-15);
+  CheckVector3(context, Eigen::Vector3d::Zero(), fast_host.bias_g,
+               "p15.fast_init.gyro_bias", 1e-15);
+  CheckVector3(context, Eigen::Vector3d::Zero(), fast_host.bias_a,
+               "p15.fast_init.accel_bias", 1e-15);
+  CheckVector3(context, native_gravity, fast_host.gravity,
+               "p15.fast_init.gravity", 1e-15);
+  context.Check((fast_host.cov - prior).cwiseAbs().maxCoeff() == 0.0,
+                "FAST-native initialization replaced the host prior");
+  context.Check(fast_adapter.initialization_samples() ==
+                        static_cast<int>(fast_samples.size()) &&
+                    fast_adapter.initialization_window_start() == 400.00 &&
+                    fast_adapter.initialization_window_end() == 400.02,
+                "FAST-native initialization window accounting mismatch");
   return context.Passed() ? 0 : 1;
 }
 

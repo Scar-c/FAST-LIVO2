@@ -12,6 +12,7 @@
 
 #include <fstream>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -30,6 +31,8 @@ class ProbLioBackend {
     int max_iterations = 4;
     double quit_eps = 0.001;
     double gravity_norm = 9.7946;
+    ImuInitializationSemantics initialization_semantics =
+        ImuInitializationSemantics::kSuperLegacy;
     double imu_gyro_variance = 0.1;
     double imu_accelerometer_variance = 0.1;
     double imu_gyro_bias_variance = 0.0001;
@@ -111,6 +114,17 @@ class ProbLioBackend {
   const ProbPlaneProvider &plane_provider() const { return plane_provider_; }
   StatesGroup &state() { return state_; }
   const StatesGroup &state() const { return state_; }
+  const ProbImuAdapter &imu_adapter() const { return imu_adapter_; }
+  bool has_initialization_snapshot() const {
+    return has_initialization_snapshot_;
+  }
+  const StatesGroup &initialization_state() const {
+    return initialization_state_;
+  }
+  double first_estimator_valid_epoch() const {
+    return first_estimator_valid_epoch_;
+  }
+  double first_output_pose_epoch() const { return first_output_pose_epoch_; }
 
   // Runtime accounting hooks used by the FAST ROS shell. They record event
   // ownership without creating a second scheduler or lifecycle authority.
@@ -167,6 +181,12 @@ class ProbLioBackend {
   Counters counters_;
   std::string last_error_;
   std::ofstream trajectory_;
+  bool has_initialization_snapshot_ = false;
+  StatesGroup initialization_state_;
+  double first_estimator_valid_epoch_ =
+      std::numeric_limits<double>::quiet_NaN();
+  double first_output_pose_epoch_ =
+      std::numeric_limits<double>::quiet_NaN();
 
   PointCloudXYZI::Ptr undistorted_scan_{new PointCloudXYZI()};
   PointCloudXYZI::Ptr downsampled_scan_{new PointCloudXYZI()};
