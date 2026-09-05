@@ -1,0 +1,6 @@
+# Prompt16 Oxford P-LIO corrective overlay.
+# Values are the audited FAST-LIVO2 config-used-OSD effective values.
+preprocess:
+  filter_size_surf: 0.5
+lio:
+  min_eigen_value: 0.01
