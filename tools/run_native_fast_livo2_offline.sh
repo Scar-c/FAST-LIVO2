@@ -16,8 +16,9 @@ BAG="${1:-/home/lc/super_livo/bag/NTU/eee_01/eee_01.bag}"
 MODE="${FAST_LIVO_MODE:-lio}"
 RUN_ROOT="${FAST_LIVO_RUN_ROOT:-$HOST_ROOT/results/prob_livo/runs}"
 RUN_ID="${FAST_LIVO_RUN_ID:-native_${MODE}_offline_$(date +%Y%m%d_%H%M%S)}"
-CONFIG="$NATIVE_ROOT/config/NTU_VIRAL.yaml"
-CAMERA_CONFIG="$NATIVE_ROOT/config/camera_NTU_VIRAL.yaml"
+CONFIG="${FAST_LIVO_CONFIG:-$NATIVE_ROOT/config/NTU_VIRAL.yaml}"
+CAMERA_CONFIG="${FAST_LIVO_CAMERA_CONFIG:-$NATIVE_ROOT/config/camera_NTU_VIRAL.yaml}"
+CPUSET="${FAST_LIVO_CPUSET:-0,2,4,6}"
 
 case "$MODE" in lio|livo) ;; *) echo "ERR: FAST_LIVO_MODE must be lio or livo" >&2; exit 2 ;; esac
 if [[ ! -f "$BAG" || ! -f "$CONFIG" || ! -f "$CAMERA_CONFIG" ||
@@ -54,6 +55,9 @@ rosparam set /common/img_en "$([[ "$MODE" == "livo" ]] && echo 1 || echo 0)"
 rosparam set /common/lidar_en 1
 rosparam set /imu/imu_en true
 rosparam set /evo/pose_output_en true
+rosparam set /pcd_save/pcd_save_en false
+rosparam set /image_save/img_save_en false
+rosparam set /publish/dense_map_en false
 rosparam dump "$RUN_DIR/effective_rosparams.yaml"
 {
   echo "repository_root: $NATIVE_ROOT"
@@ -69,13 +73,18 @@ rosparam dump "$RUN_DIR/effective_rosparams.yaml"
   echo "backend: FAST-LIVO2 native"
   echo "mode: $MODE"
   echo "camera: $([[ "$MODE" == "livo" ]] && echo ON || echo OFF)"
+  echo "logical_cpu_affinity: $CPUSET"
+  echo "worker_limit: 4"
+  echo "build_type: Release"
+  echo "build_flags: -O3 -march=native -mtune=native -mno-avx -funroll-loops EIGEN_MAX_ALIGN_BYTES=16 FAST_LIVO_MP_PROC_NUM=4"
   echo "event_source: offline_rosbag_record_order"
   echo "trajectory: $RUN_DIR/trajectory.tum"
   echo "effective_rosparams: $RUN_DIR/effective_rosparams.yaml"
 } >"$RUN_DIR/meta.txt"
 
 RUN_START=$(date +%s)
-rosrun fast_livo fastlivo_native_offline "$BAG" "$RUN_DIR" "$MODE" >"$RUN_DIR/node.log" 2>&1
+taskset -c "$CPUSET" rosrun fast_livo fastlivo_native_offline \
+  "$BAG" "$RUN_DIR" "$MODE" >"$RUN_DIR/node.log" 2>&1
 NODE_RC=$?
 RUN_END=$(date +%s)
 RUN_STATUS="$(native_runner_classify "$NODE_RC" 0 \

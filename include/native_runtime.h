@@ -41,6 +41,7 @@ struct NativeRuntimeTiming
   double map_update_s = 0.0;
   double visual_processing_s = 0.0;
   double estimator_compute_s = 0.0;
+  double estimator_cpu_s = 0.0;
 
   std::uint64_t input_preprocess_count = 0;
   std::uint64_t imu_count = 0;

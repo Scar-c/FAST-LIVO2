@@ -16,6 +16,9 @@ ImuProcess::ImuProcess() : Eye3d(M3D::Identity()),
                            Zero3d(0, 0, 0), b_first_frame(true), imu_need_init(true)
 {
   init_iter_num = 1;
+  initialization_sample_count_ = 0;
+  initialization_window_start_ = 0.0;
+  initialization_window_end_ = 0.0;
   cov_acc = V3D(0.1, 0.1, 0.1);
   cov_gyr = V3D(0.1, 0.1, 0.1);
   cov_bias_gyr = V3D(0.1, 0.1, 0.1);
@@ -41,6 +44,9 @@ void ImuProcess::Reset()
   angvel_last = Zero3d;
   imu_need_init = true;
   init_iter_num = 1;
+  initialization_sample_count_ = 0;
+  initialization_window_start_ = 0.0;
+  initialization_window_end_ = 0.0;
   IMUpose.clear();
   last_imu.reset(new sensor_msgs::Imu());
   cur_pcl_un_.reset(new PointCloudXYZI());
@@ -123,6 +129,11 @@ void ImuProcess::IMU_init(const MeasureGroup &meas, StatesGroup &state_inout, in
 
   for (const auto &imu : meas.imu)
   {
+    const double timestamp = imu->header.stamp.toSec();
+    if (initialization_sample_count_ == 0)
+      initialization_window_start_ = timestamp;
+    initialization_window_end_ = timestamp;
+    ++initialization_sample_count_;
     const auto &imu_acc = imu->linear_acceleration;
     const auto &gyr_acc = imu->angular_velocity;
     cur_acc << imu_acc.x, imu_acc.y, imu_acc.z;

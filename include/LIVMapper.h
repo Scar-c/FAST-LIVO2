@@ -205,5 +205,9 @@ public:
   bool colmap_output_en = false;
   NativeRuntimeCounters runtime_counters_;
   NativeRuntimeTiming runtime_timing_;
+  bool initialization_snapshot_captured_ = false;
+  StatesGroup initialization_state_;
+  double first_estimator_valid_epoch_ = 0.0;
+  double first_output_pose_epoch_ = 0.0;
 };
 #endif

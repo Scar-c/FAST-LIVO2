@@ -143,7 +143,7 @@ add_library(vio src/vio.cpp src/frame.cpp src/visual_point.cpp)
 add_library(lio src/voxel_map.cpp)
 add_library(pre src/preprocess.cpp)
 add_library(imu_proc src/IMU_Processing.cpp)
-add_library(laser_mapping src/LIVMapper.cpp)
+add_library(laser_mapping src/LIVMapper.cpp src/native_benchmark_monitor.cpp)
 
 # The reader is transport-only.  It invokes the public callbacks and the one
 # shared scheduler step; no estimator or map algorithm is linked twice.

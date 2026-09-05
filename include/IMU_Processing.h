@@ -63,6 +63,15 @@ public:
   M3D Eye3d;
   V3D Zero3d;
   int lidar_type;
+  std::size_t initialization_sample_count() const {
+    return initialization_sample_count_;
+  }
+  double initialization_window_start() const {
+    return initialization_window_start_;
+  }
+  double initialization_window_end() const {
+    return initialization_window_end_;
+  }
 
 private:
   void IMU_init(const MeasureGroup &meas, StatesGroup &state, int &N);
@@ -85,6 +94,9 @@ private:
   bool gravity_est_en = true;
   bool ba_bg_est_en = true;
   bool exposure_estimate_en = true;
+  std::size_t initialization_sample_count_ = 0;
+  double initialization_window_start_ = 0.0;
+  double initialization_window_end_ = 0.0;
 };
 typedef std::shared_ptr<ImuProcess> ImuProcessPtr;
 #endif

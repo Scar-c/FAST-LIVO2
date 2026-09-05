@@ -16,8 +16,9 @@ MODE="${FAST_LIVO_MODE:-lio}"
 RUN_ROOT="${FAST_LIVO_RUN_ROOT:-$HOST_ROOT/results/prob_livo/runs}"
 RUN_ID="${FAST_LIVO_RUN_ID:-native_${MODE}_online_$(date +%Y%m%d_%H%M%S)}"
 RATE="${FAST_LIVO_BAG_RATE:-1.0}"
-CONFIG="$NATIVE_ROOT/config/NTU_VIRAL.yaml"
-CAMERA_CONFIG="$NATIVE_ROOT/config/camera_NTU_VIRAL.yaml"
+CONFIG="${FAST_LIVO_CONFIG:-$NATIVE_ROOT/config/NTU_VIRAL.yaml}"
+CAMERA_CONFIG="${FAST_LIVO_CAMERA_CONFIG:-$NATIVE_ROOT/config/camera_NTU_VIRAL.yaml}"
+CPUSET="${FAST_LIVO_CPUSET:-0,2,4,6}"
 
 case "$MODE" in lio|livo) ;; *) echo "ERR: FAST_LIVO_MODE must be lio or livo" >&2; exit 2 ;; esac
 if [[ ! -f "$BAG" || ! -f "$CONFIG" || ! -f "$CAMERA_CONFIG" ||
@@ -70,8 +71,11 @@ rosparam set /evo/trajectory_output_path "$RUN_DIR/trajectory.tum"
 rosparam set /evo/runtime_report_directory "$RUN_DIR"
 rosparam set /pcd_save/pcd_save_en false
 rosparam set /image_save/img_save_en false
-rosparam set /publish/dense_map_en true
+rosparam set /publish/dense_map_en false
 rosparam dump "$RUN_DIR/effective_rosparams.yaml"
+LIDAR_TOPIC="$(rosparam get /common/lid_topic)"
+IMU_TOPIC="$(rosparam get /common/imu_topic)"
+IMAGE_TOPIC="$(rosparam get /common/img_topic)"
 {
   echo "repository_root: $NATIVE_ROOT"
   echo "native_branch: $(git -C "$NATIVE_ROOT" branch --show-current)"
@@ -87,19 +91,24 @@ rosparam dump "$RUN_DIR/effective_rosparams.yaml"
   echo "mode: $MODE"
   echo "camera: $([[ "$MODE" == "livo" ]] && echo ON || echo OFF)"
   echo "event_source: online_ros_subscribers"
-  echo "replayed_topics: /imu/imu,/os1_cloud_node1/points$([[ "$MODE" != "livo" ]] || echo ,/left/image_raw)"
+  echo "replayed_topics: $IMU_TOPIC,$LIDAR_TOPIC$([[ "$MODE" != "livo" ]] || echo ,$IMAGE_TOPIC)"
   echo "bag_rate: $RATE"
+  echo "logical_cpu_affinity: $CPUSET"
+  echo "worker_limit: 4"
+  echo "build_type: Release"
+  echo "build_flags: -O3 -march=native -mtune=native -mno-avx -funroll-loops EIGEN_MAX_ALIGN_BYTES=16 FAST_LIVO_MP_PROC_NUM=4"
   echo "trajectory: $RUN_DIR/trajectory.tum"
   echo "effective_rosparams: $RUN_DIR/effective_rosparams.yaml"
 } >"$RUN_DIR/meta.txt"
 
-rosrun fast_livo fastlivo_mapping __name:=laserMapping >"$RUN_DIR/node.log" 2>&1 &
+taskset -c "$CPUSET" rosrun fast_livo fastlivo_mapping \
+  __name:=laserMapping >"$RUN_DIR/node.log" 2>&1 &
 NODE_PID=$!
 sleep 3
 if ! kill -0 "$NODE_PID" 2>/dev/null; then echo "ERR: mapper exited during startup" >&2; exit 4; fi
 RUN_START=$(date +%s)
-TOPICS=(/imu/imu /os1_cloud_node1/points)
-if [[ "$MODE" == "livo" ]]; then TOPICS+=(/left/image_raw); fi
+TOPICS=("$IMU_TOPIC" "$LIDAR_TOPIC")
+if [[ "$MODE" == "livo" ]]; then TOPICS+=("$IMAGE_TOPIC"); fi
 rosbag play "$BAG" --clock --rate "$RATE" --topics "${TOPICS[@]}" >"$RUN_DIR/play.log" 2>&1
 PLAY_RC=$?
 RUN_END=$(date +%s)

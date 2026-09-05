@@ -18,6 +18,7 @@ struct NativeOfflineOptions
   std::string lidar_topic;
   std::string imu_topic;
   std::string image_topic;
+  std::function<void(double)> sensor_progress;
 };
 
 struct NativeOfflineAccounting
@@ -31,7 +32,11 @@ struct NativeOfflineAccounting
   double last_bag_time = 0.0;
   double first_sensor_time = 0.0;
   double last_sensor_time = 0.0;
-  double bag_io_wall_s = 0.0;
+  double wall_processing_s = 0.0;
+  double image_decode_s = 0.0;
+  std::size_t image_decode_failures = 0;
+  double sensor_duration_s = 0.0;
+  double speed_factor = 0.0;
 };
 
 struct NativeOfflineDispatch

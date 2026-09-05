@@ -11,6 +11,7 @@ which is included as part of this source code package.
 */
 
 #include "LIVMapper.h"
+#include "native_benchmark_monitor.h"
 
 #include <chrono>
 #include <filesystem>
@@ -289,8 +290,16 @@ void LIVMapper::gravityAlignment()
 void LIVMapper::processImu() 
 {
   const auto begin = NativeClock::now();
+  const bool initialization_was_pending = p_imu->imu_need_init;
 
   p_imu->Process2(LidarMeasures, _state, feats_undistort);
+
+  if (initialization_was_pending && !p_imu->imu_need_init &&
+      !initialization_snapshot_captured_) {
+    initialization_snapshot_captured_ = true;
+    initialization_state_ = _state;
+    first_estimator_valid_epoch_ = LidarMeasures.measures.back().lio_time;
+  }
 
   if (gravity_align_en) gravityAlignment();
 
@@ -353,12 +362,15 @@ void LIVMapper::writeTrajectoryPose(double timestamp)
          << _state.pos_end[1] << " " << _state.pos_end[2] << " " << q.x()
          << " " << q.y() << " " << q.z() << " " << q.w() << std::endl;
   trajectory_output_initialized_ = true;
+  if (runtime_counters_.trajectory_rows == 0)
+    first_output_pose_epoch_ = timestamp;
   runtime_counters_.trajectory_rows++;
 }
 
 bool LIVMapper::ProcessAvailableNativeEpochs()
 {
   const auto begin = NativeClock::now();
+  const double cpu_begin = fast_livo::ProcessCpuSeconds();
   runtime_counters_.scheduler_poll_calls++;
   if (!sync_packages(LidarMeasures)) return false;
 
@@ -373,6 +385,8 @@ bool LIVMapper::ProcessAvailableNativeEpochs()
   processImu();
   stateEstimationAndMapping();
   runtime_timing_.estimator_compute_s += NativeElapsedSeconds(begin);
+  runtime_timing_.estimator_cpu_s +=
+      fast_livo::ProcessCpuSeconds() - cpu_begin;
   runtime_timing_.estimator_compute_count++;
   return true;
 }
@@ -723,7 +737,7 @@ void LIVMapper::writeRuntimeReports(const std::string &output_directory) const
                 << "final_visual_map_points: " << final_visual_map_points << "\n";
 
   std::ofstream timing(prefix + ".timing.yaml");
-  timing << "schema_version: 1\n"
+  timing << std::setprecision(17) << "schema_version: 2\n"
          << "input_preprocess_s: " << runtime_timing_.input_preprocess_s << "\n"
          << "input_preprocess_count: "
          << runtime_timing_.input_preprocess_count << "\n"
@@ -741,8 +755,48 @@ void LIVMapper::writeRuntimeReports(const std::string &output_directory) const
          << "visual_processing_count: "
          << runtime_timing_.visual_processing_count << "\n"
          << "estimator_compute_s: " << runtime_timing_.estimator_compute_s << "\n"
+         << "estimator_cpu_s: " << runtime_timing_.estimator_cpu_s << "\n"
          << "estimator_compute_count: "
          << runtime_timing_.estimator_compute_count << "\n";
+
+  std::ofstream init(prefix + ".init.yaml");
+  init << std::setprecision(17) << "schema_version: 1\n"
+       << "initialization_semantics: FAST_LIVO2_NATIVE\n"
+       << "first_lidar_timestamp: " << _first_lidar_time << "\n"
+       << "captured: " << (initialization_snapshot_captured_ ? 1 : 0)
+       << "\n";
+  if (initialization_snapshot_captured_) {
+    init << "init_imu_window_start: "
+         << p_imu->initialization_window_start() << "\n"
+         << "init_imu_window_end: " << p_imu->initialization_window_end()
+         << "\n"
+         << "init_imu_sample_count: "
+         << p_imu->initialization_sample_count() << "\n"
+         << "first_estimator_valid_epoch: " << first_estimator_valid_epoch_
+         << "\n"
+         << "first_output_pose_epoch: " << first_output_pose_epoch_ << "\n";
+    const auto write_vector = [&init](const char *name, const auto &value) {
+      init << name << ": [" << value[0] << ", " << value[1] << ", "
+           << value[2] << "]\n";
+    };
+    init << "rotation_row_major: [";
+    for (int row = 0; row < 3; ++row)
+      for (int col = 0; col < 3; ++col)
+        init << (row || col ? ", " : "")
+             << initialization_state_.rot_end(row, col);
+    init << "]\n";
+    write_vector("position", initialization_state_.pos_end);
+    write_vector("velocity", initialization_state_.vel_end);
+    write_vector("gyro_bias", initialization_state_.bias_g);
+    write_vector("accel_bias", initialization_state_.bias_a);
+    write_vector("gravity", initialization_state_.gravity);
+    init << "covariance_row_major: [";
+    for (int row = 0; row < DIM_STATE; ++row)
+      for (int col = 0; col < DIM_STATE; ++col)
+        init << (row || col ? ", " : "")
+             << initialization_state_.cov(row, col);
+    init << "]\n";
+  }
 }
 
 void LIVMapper::writeProcessingCompleteSentinel(

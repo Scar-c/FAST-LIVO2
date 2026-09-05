@@ -1,6 +1,9 @@
 #include "LIVMapper.h"
+#include "native_benchmark_monitor.h"
 #include "native_offline_reader.h"
 
+#include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -13,25 +16,6 @@ namespace {
 bool IsMode(const std::string &mode)
 {
   return mode == "lio" || mode == "livo";
-}
-
-void WriteOfflineSourceReport(const std::string &output_directory,
-                              const fast_livo::NativeOfflineAccounting &accounting,
-                              std::size_t drain_steps)
-{
-  std::ofstream output(output_directory + "/offline_source.yaml");
-  output << "schema_version: 1\n"
-         << "bag_relevant_messages: " << accounting.bag_relevant_messages << "\n"
-         << "lidar_read: " << accounting.lidar_read << "\n"
-         << "imu_read: " << accounting.imu_read << "\n"
-         << "image_read: " << accounting.image_read << "\n"
-         << "ignored_records: " << accounting.ignored_records << "\n"
-         << "first_bag_time: " << accounting.first_bag_time << "\n"
-         << "last_bag_time: " << accounting.last_bag_time << "\n"
-         << "first_sensor_time: " << accounting.first_sensor_time << "\n"
-         << "last_sensor_time: " << accounting.last_sensor_time << "\n"
-         << "bag_io_wall_s: " << accounting.bag_io_wall_s << "\n"
-         << "eof_drain_steps: " << drain_steps << "\n";
 }
 
 }  // namespace
@@ -67,12 +51,19 @@ int main(int argc, char **argv)
   image_transport::ImageTransport image_transport(nh);
   LIVMapper mapper(nh);
   mapper.initializeSubscribersAndPublishers(nh, image_transport);
+  fast_livo::NativeBenchmarkProcessMonitor monitor;
+  monitor.Start(output_directory + "/memory.csv", "native", 2.0);
+  const auto offline_wall_begin = std::chrono::steady_clock::now();
+  const double offline_cpu_begin = fast_livo::ProcessCpuSeconds();
 
   fast_livo::NativeOfflineOptions options;
   options.bag_path = bag_path;
   options.lidar_topic = mapper.lid_topic;
   options.imu_topic = mapper.imu_topic;
   options.image_topic = mapper.img_en ? mapper.img_topic : "";
+  options.sensor_progress = [&](double timestamp) {
+    monitor.SetSensorTimestamp(timestamp);
+  };
 
   fast_livo::NativeOfflineDispatch dispatch;
   dispatch.on_imu = [&](const sensor_msgs::Imu::ConstPtr &message) {
@@ -103,9 +94,9 @@ int main(int argc, char **argv)
   mapper.DrainUnprocessableInputBuffers();
   mapper.savePCD();
   mapper.writeRuntimeReports(output_directory);
-  WriteOfflineSourceReport(output_directory, reader.accounting(), drain_steps);
 
   const auto &runtime = mapper.runtime_counters();
+  const auto &timing = mapper.runtime_timing();
   const auto &accounting = reader.accounting();
   const bool callbacks_drained =
       accounting.imu_read == runtime.imu_callbacks_received &&
@@ -118,13 +109,45 @@ int main(int argc, char **argv)
   mapper.writeProcessingCompleteSentinel(output_directory,
                                          "offline_rosbag_record_order", true,
                                          expected_final_epoch_reached);
+  const double offline_cpu_s =
+      fast_livo::ProcessCpuSeconds() - offline_cpu_begin;
+  const double offline_wall_s = std::chrono::duration<double>(
+      std::chrono::steady_clock::now() - offline_wall_begin).count();
+  monitor.Stop();
+
+  std::ofstream source(output_directory + "/offline_source.yaml");
+  source << "schema_version: 2\n"
+         << "bag_relevant_messages: " << accounting.bag_relevant_messages << "\n"
+         << "lidar_read: " << accounting.lidar_read << "\n"
+         << "imu_read: " << accounting.imu_read << "\n"
+         << "image_read: " << accounting.image_read << "\n"
+         << "ignored_records: " << accounting.ignored_records << "\n"
+         << "first_bag_time: " << accounting.first_bag_time << "\n"
+         << "last_bag_time: " << accounting.last_bag_time << "\n"
+         << "first_sensor_time: " << accounting.first_sensor_time << "\n"
+         << "last_sensor_time: " << accounting.last_sensor_time << "\n"
+         << "reader_total_wall_s: " << accounting.wall_processing_s << "\n"
+         << "image_decode_s: " << accounting.image_decode_s << "\n"
+         << "image_decode_failures: " << accounting.image_decode_failures
+         << "\n"
+         << "io_decode_dispatch_residual_s: "
+         << std::max(0.0, accounting.wall_processing_s -
+                              timing.estimator_compute_s -
+                              timing.input_preprocess_s)
+         << "\n"
+         << "eof_drain_steps: " << drain_steps << "\n";
+  std::ofstream system(output_directory + "/offline_system.yaml");
+  system << "schema_version: 1\n"
+         << "offline_wall_s: " << offline_wall_s << "\n"
+         << "offline_process_cpu_s: " << offline_cpu_s << "\n"
+         << "worker_limit: " << MP_PROC_NUM << "\n";
 
   std::cout << "[fastlivo_native_offline] mode=" << mode
             << " lidar_read=" << accounting.lidar_read
             << " imu_read=" << accounting.imu_read
             << " image_read=" << accounting.image_read
             << " eof_drain_steps=" << drain_steps
-            << " bag_io_wall_s=" << accounting.bag_io_wall_s << "\n";
+            << " speed_factor=" << accounting.speed_factor << "x\n";
   ros::shutdown();
   return 0;
 }
