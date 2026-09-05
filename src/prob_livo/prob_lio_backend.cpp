@@ -118,6 +118,7 @@ ProbLioBackend::~ProbLioBackend() {
                << counters_.backend_epochs_success << "\n"
                << "backend_epochs_rejected: "
                << counters_.backend_epochs_rejected << "\n"
+               << "last_error: " << last_error_ << "\n"
                << "trajectory_rows: " << counters_.trajectory_rows << "\n"
                << "adapted_scans: " << counters_.adapted_scans << "\n"
                << "adapted_points: " << counters_.adapted_points << "\n";
