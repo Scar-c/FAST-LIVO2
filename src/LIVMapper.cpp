@@ -1545,18 +1545,16 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
       m.imu.clear();
       m.lio_time = img_capture_time;
       mtx_buffer.lock();
-      while (!imu_buffer.empty())
-      {
-        if (imu_buffer.front()->header.stamp.toSec() > m.lio_time) break;
-
-        if (imu_buffer.front()->header.stamp.toSec() > meas.last_lio_update_time) m.imu.push_back(imu_buffer.front());
-
-        imu_buffer.pop_front();
-        // printf("[ Data Cut ] imu time: %lf \n",
-        // imu_buffer.front()->header.stamp.toSec());
-      }
+      prob_livo::SchedulerImuSelection selection;
+      const bool imu_selection_ok = prob_livo::ConsumeSchedulerImuEpoch(
+          imu_buffer, meas.last_lio_update_time, m.lio_time, selection,
+          2e-8, false);
+      m.imu = std::move(selection.current);
+      meas.imu_lookahead = selection.lookahead;
       mtx_buffer.unlock();
       sig_buffer.notify_all();
+
+      if (!imu_selection_ok) return false;
 
       *(meas.pcl_proc_cur) = *(meas.pcl_proc_next);
       PointCloudXYZI().swap(*meas.pcl_proc_next);
