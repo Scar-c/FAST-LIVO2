@@ -81,6 +81,10 @@ public:
   void publish_mavros(const ros::Publisher &mavros_pose_publisher);
   void publish_path(const ros::Publisher pubPath);
   void readParameters(ros::NodeHandle &nh);
+  void recordLivoBucketTelemetry(double epoch_start, double epoch_end,
+                                 std::size_t carry_over_points,
+                                 std::size_t carry_reclassified_current,
+                                 std::size_t carry_reclassified_next);
   template <typename T> void set_posestamp(T &out);
   template <typename T> void pointBodyToWorld(const Eigen::Matrix<T, 3, 1> &pi, Eigen::Matrix<T, 3, 1> &po);
   template <typename T> Eigen::Matrix<T, 3, 1> pointBodyToWorld(const Eigen::Matrix<T, 3, 1> &pi);
@@ -207,6 +211,8 @@ public:
   prob_livo::BenchmarkRuntimeCounters benchmark_runtime_counters_;
   prob_livo::BenchmarkRuntimeTiming benchmark_runtime_timing_;
   std::size_t benchmark_drain_discarded_messages_ = 0;
+  std::ofstream livo_bucket_trace_;
+  std::size_t livo_bucket_epoch_ = 0;
 
   ros::Publisher plane_pub;
   ros::Publisher voxel_pub;

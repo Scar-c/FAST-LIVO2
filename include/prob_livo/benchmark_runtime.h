@@ -23,6 +23,15 @@ struct BenchmarkRuntimeCounters {
   std::uint64_t scheduler_sync_packages = 0;
   std::uint64_t lidar_epochs = 0;
   std::uint64_t camera_epochs = 0;
+
+  // LIVO scheduler bucket accounting. These counters describe only the
+  // current/next point partition; they do not alter estimator inputs.
+  std::uint64_t livo_current_bucket_points = 0;
+  std::uint64_t livo_next_bucket_points = 0;
+  std::uint64_t livo_current_future_points = 0;
+  std::uint64_t livo_carry_over_points = 0;
+  std::uint64_t livo_carry_reclassified_current = 0;
+  std::uint64_t livo_carry_reclassified_next = 0;
 };
 
 struct BenchmarkRuntimeTiming {

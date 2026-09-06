@@ -18,6 +18,7 @@ VISUAL_GATE="${PROB_LIVO_VISUAL_PLANE_GATE:-livo2_prob_3sigma}"
 CAMERA_CONFIG="${PROB_LIVO_CAMERA_CONFIG:-$REPO_ROOT/config/camera_NTU_VIRAL.yaml}"
 CPUSET="${PROB_LIVO_CPUSET:-0,2,4,6}"
 WORKERS="${PROB_LIVO_WORKERS:-4}"
+CAMERA_STRIDE="${PROB_LIVO_CAMERA_STRIDE:-1}"
 DATASET_FAMILY="${PROB_LIVO_DATASET_FAMILY:-NTU}"
 GT_PATH="${PROB_LIVO_GT_PATH:-}"
 
@@ -29,6 +30,11 @@ case "$VISUAL_GATE" in
   livo2_prob_3sigma|super_legacy) ;;
   *) echo "ERR: invalid PROB_LIVO_VISUAL_PLANE_GATE" >&2; exit 2 ;;
 esac
+if [[ ! "$CAMERA_STRIDE" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERR: PROB_LIVO_CAMERA_STRIDE must be a positive integer" >&2
+  exit 2
+fi
+export PROB_LIVO_CAMERA_STRIDE="$CAMERA_STRIDE"
 
 if [[ ! -f "$BAG" || ! -f "$CONFIG" || \
       ( -n "$CONFIG_OVERLAY" && ! -f "$CONFIG_OVERLAY" ) || \
@@ -127,6 +133,7 @@ rosparam dump "$RUN_DIR/effective_rosparams.yaml"
   echo "dataset_family: $DATASET_FAMILY"
   echo "logical_cpu_affinity: $CPUSET"
   echo "worker_limit: $WORKERS"
+  echo "camera_stride: $CAMERA_STRIDE"
   echo "build_type: Release"
   echo "build_flags: -O3 -march=native -mtune=native -funroll-loops FAST_LIVO_MP_PROC_NUM=4"
   echo "effective_rosparams: $RUN_DIR/effective_rosparams.yaml"
@@ -186,6 +193,10 @@ if [[ "$NODE_RC" -eq 0 && "$COUNTER_RC" -eq 0 && "$GT_RC" -eq 0 && \
   echo "evaluation_rc: $EVAL_RC"
   echo "trajectory_rows: $(wc -l < "$RUN_DIR/trajectory.tum" 2>/dev/null || echo 0)"
   echo "trajectory_sha256: $(sha256sum "$RUN_DIR/trajectory.tum" 2>/dev/null | cut -d' ' -f1)"
+  echo "selected_camera_timestamps: $RUN_DIR/selected_camera_timestamps.txt"
+  echo "selected_camera_timestamps_count: $(wc -l < "$RUN_DIR/selected_camera_timestamps.txt" 2>/dev/null || echo 0)"
+  echo "selected_camera_timestamps_sha256: $(sha256sum "$RUN_DIR/selected_camera_timestamps.txt" 2>/dev/null | cut -d' ' -f1)"
+  echo "livo_bucket_trace: $RUN_DIR/livo_bucket_trace.csv"
   echo "runtime_seconds: $((RUN_END_EPOCH - RUN_START_EPOCH))"
   echo "end_utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "run_rc: $RC"

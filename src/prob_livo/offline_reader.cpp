@@ -54,6 +54,10 @@ bool OfflineReader::run(const OfflineOptions &options,
     std::printf("[Prob-LIVO OfflineReader] ERROR: invalid options/dispatch\n");
     return false;
   }
+  if (options.image_stride == 0) {
+    std::printf("[Prob-LIVO OfflineReader] ERROR: image_stride must be positive\n");
+    return false;
+  }
 
   rosbag::Bag bag;
   try {
@@ -112,6 +116,11 @@ bool OfflineReader::run(const OfflineOptions &options,
     }
 
     if (!options.image_topic.empty() && topic == options.image_topic) {
+      const std::size_t image_index = accounting_.image_seen++;
+      if (image_index % options.image_stride != 0) {
+        ++accounting_.image_dropped;
+        continue;
+      }
       sensor_msgs::ImageConstPtr message;
       if (datatype == "sensor_msgs/Image") {
         message = instance.instantiate<sensor_msgs::Image>();
@@ -125,6 +134,8 @@ bool OfflineReader::run(const OfflineOptions &options,
       }
       if (message) {
         ++accounting_.image_read;
+        accounting_.selected_image_timestamps.push_back(
+            message->header.stamp.toSec());
         RecordSensorTime(*message, accounting_);
         if (options.sensor_progress)
           options.sensor_progress(message->header.stamp.toSec());

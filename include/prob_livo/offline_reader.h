@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <functional>
 #include <string>
+#include <vector>
 
 #include <livox_ros_driver/CustomMsg.h>
 #include <sensor_msgs/Imu.h>
@@ -25,6 +26,9 @@ struct OfflineOptions {
   std::function<void(double)> sensor_progress;
   double start_offset = -1.0;
   double duration = -1.0;
+  // Deterministic transport-level camera decimation. Whole image messages are
+  // dropped before decoding/callback; all IMU and LiDAR messages are kept.
+  std::size_t image_stride = 1;
 };
 
 struct OfflineAccounting {
@@ -32,6 +36,8 @@ struct OfflineAccounting {
   std::size_t lidar_read = 0;
   std::size_t imu_read = 0;
   std::size_t image_read = 0;
+  std::size_t image_seen = 0;
+  std::size_t image_dropped = 0;
   std::size_t other_messages = 0;
   double first_bag_time = 0.0;
   double last_bag_time = 0.0;
@@ -42,6 +48,7 @@ struct OfflineAccounting {
   std::size_t image_decode_failures = 0;
   double sensor_duration_s = 0.0;
   double speed_factor = 0.0;
+  std::vector<double> selected_image_timestamps;
 };
 
 struct OfflineDispatch {

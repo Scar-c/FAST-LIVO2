@@ -17,14 +17,45 @@ which is included as part of this source code package.
 #include <ros/callback_queue.h>
 
 #include <chrono>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <iomanip>
+#include <sstream>
 
 namespace {
 using BenchmarkClock = std::chrono::steady_clock;
 
 double BenchmarkElapsed(const BenchmarkClock::time_point &begin) {
   return std::chrono::duration<double>(BenchmarkClock::now() - begin).count();
+}
+
+void HashFloat(std::uint64_t &hash, float value) {
+  std::uint32_t bits = 0;
+  static_assert(sizeof(bits) == sizeof(value), "unexpected float size");
+  std::memcpy(&bits, &value, sizeof(bits));
+  for (int shift = 0; shift < 32; shift += 8) {
+    hash ^= static_cast<std::uint8_t>((bits >> shift) & 0xffU);
+    hash *= 1099511628211ULL;
+  }
+}
+
+std::string HashPointCloud(const PointCloudXYZI &cloud) {
+  std::uint64_t hash = 1469598103934665603ULL;
+  for (const PointType &point : cloud.points) {
+    HashFloat(hash, point.x);
+    HashFloat(hash, point.y);
+    HashFloat(hash, point.z);
+    HashFloat(hash, point.intensity);
+    HashFloat(hash, point.normal_x);
+    HashFloat(hash, point.normal_y);
+    HashFloat(hash, point.normal_z);
+    HashFloat(hash, point.curvature);
+  }
+  std::ostringstream output;
+  output << std::hex << std::setfill('0') << std::setw(16) << hash;
+  return output.str();
 }
 }  // namespace
 
@@ -57,6 +88,21 @@ LIVMapper::LIVMapper(ros::NodeHandle &nh)
   root_dir = ROOT_DIR;
   initializeFiles();
   initializeComponents();
+  const char *bucket_trace_path = std::getenv("PROB_LIVO_BUCKET_TRACE_PATH");
+  if (bucket_trace_path != nullptr && *bucket_trace_path != '\0') {
+    const std::filesystem::path path(bucket_trace_path);
+    std::error_code error;
+    if (path.has_parent_path())
+      std::filesystem::create_directories(path.parent_path(), error);
+    livo_bucket_trace_.open(path, std::ios::out | std::ios::trunc);
+    if (livo_bucket_trace_.is_open()) {
+      livo_bucket_trace_
+          << "bucket_epoch,epoch_start,epoch_end,carry_over_points,"
+             "carry_reclassified_current,carry_reclassified_next,"
+             "current_bucket_points,next_bucket_points,current_future_points,"
+             "current_semantic_hash,next_semantic_hash\n";
+    }
+  }
   path.header.stamp = ros::Time::now();
   path.header.frame_id = "camera_init";
 }
@@ -104,6 +150,49 @@ LIVMapper::~LIVMapper() {
       }
     }
   }
+  if (livo_bucket_trace_.is_open()) livo_bucket_trace_.close();
+}
+
+void LIVMapper::recordLivoBucketTelemetry(
+    double epoch_start, double epoch_end, std::size_t carry_over_points,
+    std::size_t carry_reclassified_current,
+    std::size_t carry_reclassified_next) {
+  const std::size_t current_count =
+      LidarMeasures.pcl_proc_cur == nullptr
+          ? 0
+          : LidarMeasures.pcl_proc_cur->points.size();
+  const std::size_t next_count =
+      LidarMeasures.pcl_proc_next == nullptr
+          ? 0
+          : LidarMeasures.pcl_proc_next->points.size();
+  std::size_t current_future_count = 0;
+  if (LidarMeasures.pcl_proc_cur != nullptr) {
+    const float endpoint_offset_ms =
+        static_cast<float>((epoch_end - epoch_start) * 1000.0);
+    for (const PointType &point : LidarMeasures.pcl_proc_cur->points) {
+      if (point.curvature > endpoint_offset_ms) ++current_future_count;
+    }
+  }
+  benchmark_runtime_counters_.livo_current_bucket_points += current_count;
+  benchmark_runtime_counters_.livo_next_bucket_points += next_count;
+  benchmark_runtime_counters_.livo_current_future_points +=
+      current_future_count;
+  benchmark_runtime_counters_.livo_carry_over_points += carry_over_points;
+  benchmark_runtime_counters_.livo_carry_reclassified_current +=
+      carry_reclassified_current;
+  benchmark_runtime_counters_.livo_carry_reclassified_next +=
+      carry_reclassified_next;
+  if (!livo_bucket_trace_.is_open()) return;
+  ++livo_bucket_epoch_;
+  livo_bucket_trace_ << livo_bucket_epoch_ << "," << std::setprecision(17)
+                     << epoch_start << "," << epoch_end << ","
+                     << carry_over_points << ","
+                     << carry_reclassified_current << ","
+                     << carry_reclassified_next << "," << current_count << ","
+                     << next_count << "," << current_future_count << ","
+                     << HashPointCloud(*LidarMeasures.pcl_proc_cur) << ","
+                     << HashPointCloud(*LidarMeasures.pcl_proc_next) << "\n";
+  livo_bucket_trace_.flush();
 }
 
 bool LIVMapper::InputQueuesEmptyForDrain() const {
@@ -866,6 +955,19 @@ void LIVMapper::writeBenchmarkReports(
            << "\n"
            << "camera_epochs: " << benchmark_runtime_counters_.camera_epochs
            << "\n"
+           << "livo_current_bucket_points: "
+           << benchmark_runtime_counters_.livo_current_bucket_points << "\n"
+           << "livo_next_bucket_points: "
+           << benchmark_runtime_counters_.livo_next_bucket_points << "\n"
+           << "livo_current_future_points: "
+           << benchmark_runtime_counters_.livo_current_future_points << "\n"
+           << "livo_carry_over_points: "
+           << benchmark_runtime_counters_.livo_carry_over_points << "\n"
+           << "livo_carry_reclassified_current: "
+           << benchmark_runtime_counters_.livo_carry_reclassified_current
+           << "\n"
+           << "livo_carry_reclassified_next: "
+           << benchmark_runtime_counters_.livo_carry_reclassified_next << "\n"
            << "backend_epochs_attempted: " << backend.backend_epochs_attempted
            << "\n"
            << "backend_epochs_success: " << backend.backend_epochs_success
@@ -1556,8 +1658,35 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
 
       if (!imu_selection_ok) return false;
 
-      *(meas.pcl_proc_cur) = *(meas.pcl_proc_next);
+      // The next bucket is expressed relative to the previous LIO endpoint.
+      // Re-evaluate every carried point at the new camera endpoint instead of
+      // blindly promoting it to current. This is the only place where a
+      // carry-over point changes bucket ownership.
+      const std::size_t carry_over_points = meas.pcl_proc_next->points.size();
+      std::size_t carry_reclassified_current = 0;
+      std::size_t carry_reclassified_next = 0;
+      PointCloudXYZI carried_points = *meas.pcl_proc_next;
+      PointCloudXYZI().swap(*meas.pcl_proc_cur);
       PointCloudXYZI().swap(*meas.pcl_proc_next);
+      meas.pcl_proc_cur->reserve(carried_points.points.size());
+      meas.pcl_proc_next->reserve(carried_points.points.size());
+      for (const PointType &source : carried_points.points)
+      {
+        PointType rebased;
+        const prob_livo::LivoPointBucket bucket =
+            prob_livo::RebaseLivoCarryOverPoint(
+                source, meas.last_lio_update_time, m.lio_time, rebased);
+        if (bucket == prob_livo::LivoPointBucket::kCurrent)
+        {
+          meas.pcl_proc_cur->points.push_back(rebased);
+          ++carry_reclassified_current;
+        }
+        else
+        {
+          meas.pcl_proc_next->points.push_back(rebased);
+          ++carry_reclassified_next;
+        }
+      }
 
       int lid_frame_num = lid_raw_data_buffer.size();
       int max_size = meas.pcl_proc_cur->size() + 24000 * lid_frame_num;
@@ -1590,6 +1719,14 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
         lid_raw_data_buffer.pop_front();
         lid_header_time_buffer.pop_front();
       }
+
+      meas.pcl_proc_cur->width = meas.pcl_proc_cur->points.size();
+      meas.pcl_proc_cur->height = 1;
+      meas.pcl_proc_next->width = meas.pcl_proc_next->points.size();
+      meas.pcl_proc_next->height = 1;
+      recordLivoBucketTelemetry(
+          meas.last_lio_update_time, m.lio_time, carry_over_points,
+          carry_reclassified_current, carry_reclassified_next);
 
       meas.measures.push_back(m);
       meas.lio_vio_flg = LIO;

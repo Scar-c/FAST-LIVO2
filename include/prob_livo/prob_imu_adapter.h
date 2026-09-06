@@ -50,6 +50,27 @@ inline LivoPointBucket RebaseLivoPoint(const PointType &source,
   return LivoPointBucket::kNext;
 }
 
+/**
+ * Reclassify a point that was carried in the previous next bucket.
+ *
+ * A carried point's curvature is already relative to carried_origin.  It
+ * must therefore be compared in that coordinate system and rebased only if
+ * it remains in the next bucket.  In particular, the strict boundary is
+ * intentional: t_i == T_e remains next, matching the raw-point cut.
+ */
+inline LivoPointBucket RebaseLivoCarryOverPoint(
+    const PointType &source, double carried_origin, double current_lio_time,
+    PointType &rebased) {
+  const float current_offset_ms = static_cast<float>(
+      (current_lio_time - carried_origin) * 1000.0);
+  rebased = source;
+  if (source.curvature < current_offset_ms) {
+    return LivoPointBucket::kCurrent;
+  }
+  rebased.curvature -= current_offset_ms;
+  return LivoPointBucket::kNext;
+}
+
 class ProbImuAdapter {
  public:
   struct Options {

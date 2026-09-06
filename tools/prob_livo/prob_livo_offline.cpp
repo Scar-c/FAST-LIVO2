@@ -9,6 +9,7 @@
 #include <string>
 #include <cstdlib>
 #include <chrono>
+#include <iomanip>
 
 #include <image_transport/image_transport.h>
 #include <omp.h>
@@ -29,6 +30,15 @@ int PositiveEnvironment(const char *name, int fallback) {
   try {
     const int value = std::stoi(Environment(name, std::to_string(fallback)));
     return value > 0 ? value : fallback;
+  } catch (...) {
+    return fallback;
+  }
+}
+
+std::size_t PositiveSizeEnvironment(const char *name, std::size_t fallback) {
+  try {
+    const long long value = std::stoll(Environment(name, std::to_string(fallback)));
+    return value > 0 ? static_cast<std::size_t>(value) : fallback;
   } catch (...) {
     return fallback;
   }
@@ -69,6 +79,8 @@ int main(int argc, char **argv) {
   const std::string camera_mode = Environment("PROB_LIVO_CAMERA_MODE", "off");
   const std::string visual_gate = Environment(
       "PROB_LIVO_VISUAL_PLANE_GATE", "livo2_prob_3sigma");
+  const std::size_t camera_stride =
+      PositiveSizeEnvironment("PROB_LIVO_CAMERA_STRIDE", 1);
   if (!IsCameraMode(camera_mode) ||
       (visual_gate != "livo2_prob_3sigma" && visual_gate != "super_legacy")) {
     std::cerr << "invalid PROB_LIVO_CAMERA_MODE or "
@@ -87,6 +99,8 @@ int main(int argc, char **argv) {
   }
   ConfigureRuntime(output_directory, input_semantics, camera_mode,
                    visual_gate);
+  setenv("PROB_LIVO_BUCKET_TRACE_PATH",
+         (output_directory + "/livo_bucket_trace.csv").c_str(), 1);
 
   ros::NodeHandle nh;
   image_transport::ImageTransport image_transport(nh);
@@ -102,6 +116,7 @@ int main(int argc, char **argv) {
   options.lidar_topic = mapper.lid_topic;
   options.imu_topic = mapper.imu_topic;
   options.image_topic = mapper.img_en ? mapper.img_topic : "";
+  options.image_stride = camera_stride;
   options.sensor_progress = [&](double timestamp) {
     monitor.SetSensorTimestamp(timestamp);
   };
@@ -146,6 +161,11 @@ int main(int argc, char **argv) {
   const auto &runtime = mapper.benchmark_runtime_counters();
   const auto &timing = mapper.benchmark_runtime_timing();
   const auto &accounting = reader.accounting();
+  std::ofstream selected_images(output_directory +
+                                "/selected_camera_timestamps.txt");
+  selected_images << std::setprecision(17);
+  for (const double timestamp : accounting.selected_image_timestamps)
+    selected_images << timestamp << "\n";
   const bool callbacks_drained =
       accounting.imu_read == runtime.imu_callbacks_received &&
       accounting.lidar_read == runtime.lidar_callbacks_received &&
@@ -170,6 +190,9 @@ int main(int argc, char **argv) {
          << "lidar_read: " << accounting.lidar_read << "\n"
          << "imu_read: " << accounting.imu_read << "\n"
          << "image_read: " << accounting.image_read << "\n"
+         << "image_seen: " << accounting.image_seen << "\n"
+         << "image_dropped: " << accounting.image_dropped << "\n"
+         << "image_stride: " << camera_stride << "\n"
          << "other_messages: " << accounting.other_messages << "\n"
          << "first_bag_time: " << accounting.first_bag_time << "\n"
          << "last_bag_time: " << accounting.last_bag_time << "\n"

@@ -130,6 +130,54 @@ int RunI2ContinuityTests(TestContext &context) {
                              600.540) < 1e-6,
                 "camera-cut rebase origins were not preserved");
 
+  // Prompt18 carry oracle: a point carried from the previous next bucket is
+  // still compared against its absolute time.  It may become current at the
+  // next camera endpoint, or remain next and be rebased exactly once.
+  PointType carry_before = source_next;
+  carry_before.curvature = 40.0f;  // carried origin 600.49 -> 600.53
+  PointType carry_equal = carry_before;
+  carry_equal.curvature = 40.0f;  // exactly the new endpoint
+  PointType carry_after = carry_before;
+  carry_after.curvature = 50.0f;  // absolute time 600.54
+  PointType carry_before_out;
+  PointType carry_equal_out;
+  PointType carry_after_out;
+  context.Check(
+      prob_livo::RebaseLivoCarryOverPoint(carry_before, 600.49, 600.54,
+                                          carry_before_out) ==
+              prob_livo::LivoPointBucket::kCurrent &&
+          prob_livo::RebaseLivoCarryOverPoint(carry_equal, 600.49, 600.53,
+                                              carry_equal_out) ==
+              prob_livo::LivoPointBucket::kNext &&
+          prob_livo::RebaseLivoCarryOverPoint(carry_after, 600.49, 600.53,
+                                              carry_after_out) ==
+              prob_livo::LivoPointBucket::kNext,
+      "Prompt18 carry points did not follow strict current/next boundaries");
+  context.Check(std::abs(carry_before_out.curvature - 40.0f) < 1e-6 &&
+                    std::abs(carry_equal_out.curvature - 0.0f) < 1e-6 &&
+                    std::abs(carry_after_out.curvature - 10.0f) < 1e-6,
+                "Prompt18 carry points were rebased from the wrong origin");
+
+  // The scheduler must preserve source order for non-monotone point input;
+  // classification is point-wise and may not sort or clamp the scan.
+  const std::vector<float> non_monotone_offsets = {50.0f, 5.0f, 40.0f};
+  std::vector<prob_livo::LivoPointBucket> non_monotone_buckets;
+  for (const float offset : non_monotone_offsets) {
+    PointType source = carry_after;
+    source.curvature = offset;
+    PointType output;
+    non_monotone_buckets.push_back(prob_livo::RebaseLivoCarryOverPoint(
+        source, 600.49, 600.53, output));
+  }
+  context.Check(non_monotone_buckets.size() == 3 &&
+                    non_monotone_buckets[0] ==
+                        prob_livo::LivoPointBucket::kNext &&
+                    non_monotone_buckets[1] ==
+                        prob_livo::LivoPointBucket::kCurrent &&
+                    non_monotone_buckets[2] ==
+                        prob_livo::LivoPointBucket::kNext,
+                "Prompt18 non-monotone point order was not preserved");
+
   // Hybrid-authority guard: the staged adapter output has a unique name and
   // must not be wired to FAST's existing Process2/feats_undistort path.
   std::ifstream mapper_source(std::string(ROOT_DIR) + "src/LIVMapper.cpp");
