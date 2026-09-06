@@ -1641,7 +1641,7 @@ void LIVMapper::compressed_img_cbk(
       cv_bridge::CvImage(msg_in->header, sensor_msgs::image_encodings::BGR8,
                          decoded)
           .toImageMsg();
-  img_cbk(image);
+  processImageCallback(image);
 }
 
 bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
