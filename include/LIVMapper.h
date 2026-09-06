@@ -23,6 +23,8 @@ which is included as part of this source code package.
 #include <nav_msgs/Path.h>
 #include <vikit/camera_loader.h>
 
+#include <fstream>
+
 namespace prob_livo {
 class ProbLioBackend;
 }
@@ -213,6 +215,9 @@ public:
   std::size_t benchmark_drain_discarded_messages_ = 0;
   std::ofstream livo_bucket_trace_;
   std::size_t livo_bucket_epoch_ = 0;
+  std::size_t online_camera_callback_index_ = 0;
+  std::size_t online_camera_stride_ = 1;
+  std::ofstream online_selected_camera_timestamps_;
 
   ros::Publisher plane_pub;
   ros::Publisher voxel_pub;

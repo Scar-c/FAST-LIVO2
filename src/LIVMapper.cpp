@@ -22,6 +22,7 @@ which is included as part of this source code package.
 #include <cstring>
 #include <filesystem>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 
 namespace {
@@ -56,6 +57,17 @@ std::string HashPointCloud(const PointCloudXYZI &cloud) {
   std::ostringstream output;
   output << std::hex << std::setfill('0') << std::setw(16) << hash;
   return output.str();
+}
+
+std::size_t OnlineCameraStride() {
+  const char *value = std::getenv("PROB_LIVO_ONLINE_CAMERA_STRIDE");
+  if (value == nullptr || *value == '\0') return 1;
+  char *end = nullptr;
+  const unsigned long long parsed = std::strtoull(value, &end, 10);
+  if (end == value || *end != '\0' || parsed == 0 ||
+      parsed > std::numeric_limits<std::size_t>::max())
+    return 1;
+  return static_cast<std::size_t>(parsed);
 }
 }  // namespace
 
@@ -102,6 +114,17 @@ LIVMapper::LIVMapper(ros::NodeHandle &nh)
              "current_bucket_points,next_bucket_points,current_future_points,"
              "current_semantic_hash,next_semantic_hash\n";
     }
+  }
+  online_camera_stride_ = OnlineCameraStride();
+  const char *selected_timestamp_path =
+      std::getenv("PROB_LIVO_SELECTED_CAMERA_TIMESTAMPS_PATH");
+  if (selected_timestamp_path != nullptr && *selected_timestamp_path != '\0') {
+    const std::filesystem::path path(selected_timestamp_path);
+    std::error_code error;
+    if (path.has_parent_path())
+      std::filesystem::create_directories(path.parent_path(), error);
+    online_selected_camera_timestamps_.open(
+        path, std::ios::out | std::ios::trunc);
   }
   path.header.stamp = ros::Time::now();
   path.header.frame_id = "camera_init";
@@ -151,6 +174,8 @@ LIVMapper::~LIVMapper() {
     }
   }
   if (livo_bucket_trace_.is_open()) livo_bucket_trace_.close();
+  if (online_selected_camera_timestamps_.is_open())
+    online_selected_camera_timestamps_.close();
 }
 
 void LIVMapper::recordLivoBucketTelemetry(
@@ -1485,10 +1510,20 @@ cv::Mat LIVMapper::getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg)
 
 void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
 {
+  const std::size_t callback_index = online_camera_callback_index_++;
   ++benchmark_runtime_counters_.image_callbacks_received;
   if (!img_en) {
     ++benchmark_runtime_counters_.ignored_input_messages;
     return;
+  }
+  if (callback_index % online_camera_stride_ != 0) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
+    return;
+  }
+  if (online_selected_camera_timestamps_.is_open()) {
+    online_selected_camera_timestamps_ << std::setprecision(17)
+                                        << msg_in->header.stamp.toSec()
+                                        << "\n";
   }
   sensor_msgs::Image::Ptr msg(new sensor_msgs::Image(*msg_in));
   // if ((abs(msg->header.stamp.toSec() - last_timestamp_img) > 0.2 && last_timestamp_img > 0) || sync_jump_flag)
