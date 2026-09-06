@@ -336,3 +336,28 @@ Prompt18 final status is
 blind carry promotion, so the forbidden point-by-point Native current/next
 identity was not claimed. No NTU stride benchmark, Prompt15 full rerun, P5,
 I8, or new Prompt18 H1/H2 ablation was started.
+
+## Prompt 19 / canonical stride and resource comparison
+
+Prompt19 freezes Native-compatible Prob-LIVO as blind carry plus native
+late-point deskew and exposes strict carry reclassification only as the
+secondary Prompt18 policy. The P0 restoration gate passes on Quarter_01 with
+zero strict reclassification and zero backend rejection. The canonical P0/P0S
+Oxford batch covers Church_05, College_03, Palace_01, and Quarter_01 with
+three repetitions, fixed affinity `0,2,4,6`, four workers, Release, and
+the frozen stride policy Church=1 / other sequences=2.
+
+P0S and N1 selected camera timestamp streams are exact. The canonical Prob
+stride reduces total wall and estimator CPU on the three true stride
+sequences, and approximately halves process PSS/USS; the accuracy direction
+is sequence-dependent. The full P0/P0S/P1/P2 factorial shows the strongest
+strict-carry interaction on Palace. The Quarter P0S online/offline check has
+exact selected input, bucket trace, event counters, and visual call/commit
+identity; trajectory bytes remain under the accepted visual numerical
+nondeterminism contract.
+
+An execution-integrity incident from stale overlapping runner shells was
+isolated and excluded. Clean serial replacement rows are the authoritative
+formal repetitions 2/3. Prompt19 is
+`PROMPT19 CLOSED — CANONICAL STRIDE + RESOURCE COMPARISON COMPLETE`; no
+NTU stride experiment, Prompt15 full rerun, P5, I8, or tuning follows.

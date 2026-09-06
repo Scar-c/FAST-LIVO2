@@ -74,3 +74,8 @@ The exact Prompt 19 text is registered at
 Prompt 19 compares canonical Native-compatible Prob-LIVO P0/P0S against
 Native N0/N1 under the frozen Oxford stride policy and the common four-core
 resource envelope. Prompt18 P1/P2 remain secondary evidence only.
+
+The complete Prompt 19 report is in
+`spec/prob_livo/PROMPT19_EVIDENCE.md`, with row-level measurements in
+`spec/prob_livo/PROMPT19_RUN_LEDGER.csv`. Prompt 19 is
+`PROMPT19 CLOSED — CANONICAL STRIDE + RESOURCE COMPARISON COMPLETE`.

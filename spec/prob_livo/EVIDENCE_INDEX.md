@@ -571,3 +571,21 @@ Final status: `PROMPT18 BUCKET CLOSED / STRIDE OWNER DECISION REQUIRED`.
 The Prob-LIVO current/next corrective is closed and the Oxford stride axis is
 complete. The report explicitly retains the Native blind-carry mismatch as an
 owner decision; no point-by-point Native==Prob claim is made.
+
+## Prompt 19 Evidence
+
+Prompt19 is registered at
+`prompts/prob_livo/prompt19_canonical_stride_resource_closure.md`, SHA256
+`b9254719102da7e4ce63ce7479152e9541686f0c1fca0119a8e98a7f4416f0eb`.
+The complete report is
+[`PROMPT19_EVIDENCE.md`](PROMPT19_EVIDENCE.md), with the row-level
+[`PROMPT19_RUN_LEDGER.csv`](PROMPT19_RUN_LEDGER.csv).
+
+Final status: `PROMPT19 CLOSED — CANONICAL STRIDE + RESOURCE COMPARISON COMPLETE`.
+The 24-cell canonical P0/P0S Oxford Prob-LIVO batch and reused
+resource-compatible N0/N1 Native batch have three repetitions per sequence.
+All use affinity `0,2,4,6`, four workers, Release, and the frozen Church=1 /
+College=Palace=Quarter=2 camera stride policy. The report includes exact
+selected-camera identity, estimator/runtime/CPU/memory data, visual workload,
+P0/P0S/P1/P2 factorial interpretation, and the Quarter online/offline parity
+check. No NTU stride run or Prompt15 full rerun was performed.
