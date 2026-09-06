@@ -534,3 +534,26 @@ Prompt8 H1 result is explicitly invalid for the probabilistic ablation.
 
 Prompt 9 final decision: `I6 CLOSED`. I7 downsample ablation remains
 cancelled and I8 has not started.
+
+## Prompt 17 Evidence
+
+Prompt17 is registered at
+`/home/lc/super_livo/prompts/Prompt 17 — Native Late-Point Deskew Corrective.md`.
+The complete report is `spec/prob_livo/PROMPT17_EVIDENCE.md`, with run
+ledger `spec/prob_livo/PROMPT17_RUN_LEDGER.csv`.
+
+Final status: `PROMPT17 CLOSED — NATIVE LATE-POINT SEMANTICS RESTORED`.
+The shared native `ProbImuAdapter::Undistort` path now performs temporary
+terminal-motion extrapolation for points after the scheduler endpoint,
+without advancing the shared filter, covariance, lifecycle, or next anchor.
+The red fixture covers both P-LIO and P-LIVO scheduler modes, nonidentity
+extrinsics, nonzero motion, endpoint/late points, and source-order points.
+G-P17.1/G-P17.2 passes 27 checks; all focused I1–I6/P4 suites pass.
+
+Oxford 32-worker P-LIO Church, Palace, and Quarter complete with zero backend
+rejections. Oxford 32-worker P-LIVO Church, College_03, Palace, and Quarter
+also complete with zero backend rejections and active visual processing. The
+true-late Palace P-LIO online and offline runs have identical trajectory SHA,
+trace SHA, counters, late-point telemetry, and ATE. Final 4-core canonical
+verification passes P-LIO Church/Palace/Quarter and P-LIVO Church/College_03.
+No P-LIVO tuning or stride change was made.

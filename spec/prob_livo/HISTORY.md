@@ -285,3 +285,31 @@ used the wrong Jacobian.
 
 All I1–I6/P4 tests and the full build pass. I6 is now `CLOSED`; I7 downsample
 ablation remains cancelled and I8 is not started.
+
+## Prompt 17 / Native late-point deskew corrective
+
+Prompt17 restores FAST-LIVO2-native late-point semantics in the shared
+`ProbImuAdapter::Undistort` implementation. A point sampled after the
+scheduler endpoint receives a temporary terminal angular/linear motion
+extrapolation and is transformed back into the scheduler endpoint frame. The
+shared filter, covariance, lifecycle, and next anchor remain at the scheduler
+endpoint. The corrective is exercised by a red-capable fixture for both P-LIO
+and P-LIVO, with nonzero motion, nonidentity extrinsics, sub-microsecond late
+points, endpoint points, and a non-monotone source-order tail.
+
+The old implementation failed the fixture by rejecting the complete scan;
+the corrected implementation passes G-P17.1/G-P17.2 with 27 checks. The
+native 20 ns tolerance remains unchanged, and mutation gates reject tolerance
+expansion, endpoint clamping, Super-only extrinsic fallback, and shared-state
+writeback.
+
+The project-owned offline runner was used for Oxford P-LIO and P-LIVO
+regressions with TBB worker cap 32. Church, Palace, and Quarter P-LIO all
+complete with zero backend rejections; P-LIVO Church, College_03, Palace, and
+Quarter likewise complete with zero backend rejections and active visual
+processing. Palace is a true late-point sequence: online and offline runs have
+identical trajectory and diagnostic-trace SHA256, counters, late-point
+statistics, and ATE. The final 4-core canonical P-LIO Church/Palace/Quarter
+and P-LIVO Church/College_03 checks all pass. Prompt17 is
+`PROMPT17 CLOSED — NATIVE LATE-POINT SEMANTICS RESTORED`; no P-LIVO tuning or
+visual stride change was performed.
