@@ -67,3 +67,10 @@ comparison and must not enter LIVO/H1/H2 or I8.
 The complete Prompt 10 report is in
 `spec/prob_livo/PROMPT10_EVIDENCE.md`; Prompt 10 is
 `PROMPT10 CHARACTERIZATION CLOSED` and stops for owner review.
+
+The exact Prompt 19 text is registered at
+`prompts/prob_livo/prompt19_canonical_stride_resource_closure.md` (SHA256
+`b9254719102da7e4ce63ce7479152e9541686f0c1fca0119a8e98a7f4416f0eb`).
+Prompt 19 compares canonical Native-compatible Prob-LIVO P0/P0S against
+Native N0/N1 under the frozen Oxford stride policy and the common four-core
+resource envelope. Prompt18 P1/P2 remain secondary evidence only.
