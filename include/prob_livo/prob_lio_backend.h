@@ -86,6 +86,12 @@ class ProbLioBackend {
     std::size_t trajectory_rows = 0;
     std::size_t adapted_scans = 0;
     std::size_t adapted_points = 0;
+    std::size_t late_point_epochs = 0;
+    std::size_t late_point_count = 0;
+    double late_point_median_lateness_us =
+        std::numeric_limits<double>::quiet_NaN();
+    double late_point_max_lateness_us =
+        std::numeric_limits<double>::quiet_NaN();
   };
 
   ProbLioBackend(StatesGroup &state, const Options &options);
@@ -172,6 +178,11 @@ class ProbLioBackend {
     double lidar_frame_end_time = std::numeric_limits<double>::quiet_NaN();
     double point_time_min = std::numeric_limits<double>::quiet_NaN();
     double point_time_max = std::numeric_limits<double>::quiet_NaN();
+    std::size_t late_point_count = 0;
+    double late_point_median_lateness_us =
+        std::numeric_limits<double>::quiet_NaN();
+    double late_point_max_lateness_us =
+        std::numeric_limits<double>::quiet_NaN();
     std::size_t imu_count = 0;
     double imu_start = std::numeric_limits<double>::quiet_NaN();
     double imu_end = std::numeric_limits<double>::quiet_NaN();
@@ -226,6 +237,7 @@ class ProbLioBackend {
   std::ofstream prompt16_trace_;
   bool prompt16_trace_active_ = false;
   Prompt16TraceRecord prompt16_trace_record_;
+  std::vector<double> late_point_lateness_us_;
   bool has_initialization_snapshot_ = false;
   StatesGroup initialization_state_;
   double first_estimator_valid_epoch_ =

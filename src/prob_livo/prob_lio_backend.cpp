@@ -93,6 +93,8 @@ ProbLioBackend::ProbLioBackend(StatesGroup &state, const Options &options)
       prompt16_trace_
           << "backend_epoch,mode,epoch_start,epoch_end,lidar_frame_beg_time,"
              "lidar_frame_end_time,point_time_min,point_time_max,imu_count,"
+             "late_point_count,late_point_median_lateness_us,"
+             "late_point_max_lateness_us,"
              "imu_start,imu_end,raw_points,preprocessed_points,"
              "undistorted_points,downsampled_points,map_queries,"
              "map_query_successes,plane_candidates,valid_associations,"
@@ -120,7 +122,18 @@ ProbLioBackend::~ProbLioBackend() {
     std::ofstream counters(options_.trajectory_path + ".counters.yaml",
                             std::ios::out | std::ios::trunc);
     if (counters.is_open()) {
-      counters << "schema_version: 3\n"
+      if (!late_point_lateness_us_.empty()) {
+        std::vector<double> sorted_lateness = late_point_lateness_us_;
+        std::sort(sorted_lateness.begin(), sorted_lateness.end());
+        const std::size_t middle = sorted_lateness.size() / 2;
+        if (sorted_lateness.size() % 2 == 0) {
+          counters_.late_point_median_lateness_us =
+              0.5 * (sorted_lateness[middle - 1] + sorted_lateness[middle]);
+        } else {
+          counters_.late_point_median_lateness_us = sorted_lateness[middle];
+        }
+      }
+      counters << "schema_version: 4\n"
                << "successful_epochs: " << counters_.successful_epochs << "\n"
                << "imu_init_epochs: " << counters_.imu_init_epochs << "\n"
                << "map_init_epochs: " << counters_.map_init_epochs << "\n"
@@ -154,7 +167,13 @@ ProbLioBackend::~ProbLioBackend() {
                << "last_error: " << last_error_ << "\n"
                << "trajectory_rows: " << counters_.trajectory_rows << "\n"
                << "adapted_scans: " << counters_.adapted_scans << "\n"
-               << "adapted_points: " << counters_.adapted_points << "\n";
+               << "adapted_points: " << counters_.adapted_points << "\n"
+               << "late_point_epochs: " << counters_.late_point_epochs << "\n"
+               << "late_point_count: " << counters_.late_point_count << "\n"
+               << "late_point_median_lateness_us: "
+               << counters_.late_point_median_lateness_us << "\n"
+               << "late_point_max_lateness_us: "
+               << counters_.late_point_max_lateness_us << "\n";
     }
   }
   if (trajectory_.is_open()) trajectory_.close();
@@ -194,6 +213,7 @@ void ProbLioBackend::BeginPrompt16Trace(const LidarMeasureGroup &measures,
     const double point_time_origin =
         mode == SchedulerMode::kOnlyLio ? measures.lidar_frame_beg_time
                                         : prompt16_trace_record_.epoch_start;
+    std::vector<double> epoch_lateness_us;
     for (const PointType &point : measures.pcl_proc_cur->points) {
       const double point_time =
           point_time_origin + static_cast<double>(point.curvature) / 1000.0;
@@ -206,6 +226,35 @@ void ProbLioBackend::BeginPrompt16Trace(const LidarMeasureGroup &measures,
         prompt16_trace_record_.point_time_max = point_time;
       prompt16_trace_record_.point_time_max =
           std::max(prompt16_trace_record_.point_time_max, point_time);
+      if (std::isfinite(prompt16_trace_record_.epoch_end) &&
+          point_time > prompt16_trace_record_.epoch_end) {
+        const double lateness_us =
+            (point_time - prompt16_trace_record_.epoch_end) * 1.0e6;
+        if (std::isfinite(lateness_us) && lateness_us > 0.0) {
+          epoch_lateness_us.push_back(lateness_us);
+          late_point_lateness_us_.push_back(lateness_us);
+        }
+      }
+    }
+    if (!epoch_lateness_us.empty()) {
+      std::sort(epoch_lateness_us.begin(), epoch_lateness_us.end());
+      const std::size_t middle = epoch_lateness_us.size() / 2;
+      prompt16_trace_record_.late_point_count = epoch_lateness_us.size();
+      if (epoch_lateness_us.size() % 2 == 0) {
+        prompt16_trace_record_.late_point_median_lateness_us =
+            0.5 * (epoch_lateness_us[middle - 1] + epoch_lateness_us[middle]);
+      } else {
+        prompt16_trace_record_.late_point_median_lateness_us =
+            epoch_lateness_us[middle];
+      }
+      prompt16_trace_record_.late_point_max_lateness_us =
+          epoch_lateness_us.back();
+      ++counters_.late_point_epochs;
+      counters_.late_point_count += epoch_lateness_us.size();
+      if (!std::isfinite(counters_.late_point_max_lateness_us) ||
+          epoch_lateness_us.back() > counters_.late_point_max_lateness_us) {
+        counters_.late_point_max_lateness_us = epoch_lateness_us.back();
+      }
     }
   }
   prompt16_trace_record_.state_finite = StateIsFinite();
@@ -225,6 +274,9 @@ void ProbLioBackend::FinishPrompt16Trace(bool success) {
                   << prompt16_trace_record_.lidar_frame_end_time << ","
                   << prompt16_trace_record_.point_time_min << ","
                   << prompt16_trace_record_.point_time_max << ","
+                  << prompt16_trace_record_.late_point_count << ","
+                  << prompt16_trace_record_.late_point_median_lateness_us << ","
+                  << prompt16_trace_record_.late_point_max_lateness_us << ","
                   << prompt16_trace_record_.imu_count << ","
                   << prompt16_trace_record_.imu_start << ","
                   << prompt16_trace_record_.imu_end << ","
