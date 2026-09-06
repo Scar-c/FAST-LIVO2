@@ -92,10 +92,10 @@ ProbLioBackend::ProbLioBackend(StatesGroup &state, const Options &options)
     if (prompt16_trace_.is_open()) {
       prompt16_trace_
           << "backend_epoch,mode,epoch_start,epoch_end,lidar_frame_beg_time,"
-             "lidar_frame_end_time,point_time_min,point_time_max,imu_count,"
+             "lidar_frame_end_time,point_time_min,point_time_max,"
              "late_point_count,late_point_median_lateness_us,"
-             "late_point_max_lateness_us,"
-             "imu_start,imu_end,raw_points,preprocessed_points,"
+             "late_point_max_lateness_us,imu_count,imu_start,imu_end,"
+             "raw_points,preprocessed_points,"
              "undistorted_points,downsampled_points,map_queries,"
              "map_query_successes,plane_candidates,valid_associations,"
              "accepted_p2p,map_covariances_checked,map_covariances_invalid,"
