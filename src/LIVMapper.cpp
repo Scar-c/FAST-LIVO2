@@ -1070,6 +1070,29 @@ void LIVMapper::writeBenchmarkReports(
         init << (row || col ? ", " : "") << state.cov(row, col);
     init << "]\n";
   }
+
+  // ProbLioBackend owns the historical trajectory.tum.counters.yaml and
+  // rewrites it during destruction. Keep scheduler-owned bucket accounting in
+  // a separate report so it cannot be lost during teardown.
+  std::ofstream bucket_output(prefix + ".bucket_counters.yaml");
+  bucket_output << "schema_version: 1\n"
+                << "bucket_trace_epochs: " << livo_bucket_epoch_ << "\n"
+                << "livo_current_bucket_points: "
+                << benchmark_runtime_counters_.livo_current_bucket_points
+                << "\n"
+                << "livo_next_bucket_points: "
+                << benchmark_runtime_counters_.livo_next_bucket_points << "\n"
+                << "livo_current_future_points: "
+                << benchmark_runtime_counters_.livo_current_future_points
+                << "\n"
+                << "livo_carry_over_points: "
+                << benchmark_runtime_counters_.livo_carry_over_points << "\n"
+                << "livo_carry_reclassified_current: "
+                << benchmark_runtime_counters_.livo_carry_reclassified_current
+                << "\n"
+                << "livo_carry_reclassified_next: "
+                << benchmark_runtime_counters_.livo_carry_reclassified_next
+                << "\n";
 }
 
 void LIVMapper::writeProcessingCompleteSentinel(
