@@ -24,6 +24,8 @@ MEMORY_LABEL="${PROB_LIVO_MEMORY_LABEL:-$CAMERA_MODE}"
 MEMORY_INTERVAL="${PROB_LIVO_MEMORY_INTERVAL:-2}"
 CPUSET="${PROB_LIVO_CPUSET:-0,2,4,6}"
 WORKERS="${PROB_LIVO_WORKERS:-4}"
+DATASET_FAMILY="${PROB_LIVO_DATASET_FAMILY:-NTU}"
+GT_PATH="${PROB_LIVO_GT_PATH:-}"
 
 case "$CAMERA_MODE" in
   off|h0|h1|h2) ;;
@@ -32,6 +34,16 @@ esac
 case "$VISUAL_GATE" in
   livo2_prob_3sigma|super_legacy) ;;
   *) echo "ERR: invalid PROB_LIVO_VISUAL_PLANE_GATE" >&2; exit 2 ;;
+esac
+case "$DATASET_FAMILY" in
+  NTU) ;;
+  OXFORD)
+    if [[ -z "$GT_PATH" || ! -s "$GT_PATH" ]]; then
+      echo "ERR: Oxford runs require PROB_LIVO_GT_PATH" >&2
+      exit 2
+    fi
+    ;;
+  *) echo "ERR: unsupported PROB_LIVO_DATASET_FAMILY" >&2; exit 2 ;;
 esac
 
 if [[ ! -f "$BAG" || ! -f "$CONFIG" || \
@@ -144,6 +156,8 @@ fi
   echo "memory_label: ${MEMORY_CSV:+$MEMORY_LABEL}"
   echo "memory_interval_seconds: ${MEMORY_CSV:+$MEMORY_INTERVAL}"
   echo "replayed_topics: $IMU_TOPIC,$LIDAR_TOPIC$([[ "$CAMERA_MODE" == "off" ]] || echo ,$IMAGE_TOPIC)"
+  echo "dataset_family: $DATASET_FAMILY"
+  echo "ground_truth_path: ${GT_PATH:-generated_from_bag}"
   echo "logical_cpu_affinity: $CPUSET"
   echo "worker_limit: $WORKERS"
   echo "build_type: Release"
@@ -203,14 +217,26 @@ else
   COUNTER_RC=2
 fi
 
-python3 "$REPO_ROOT/eval/prob_livo/pose_bag_to_tum.py" \
-  --bag "$BAG" --topic /leica/pose/relative --output "$RUN_DIR/ground_truth.tum" \
-  >"$RUN_DIR/ground_truth.log" 2>&1
-GT_RC=$?
+if [[ "$DATASET_FAMILY" == "OXFORD" ]]; then
+  cp "$GT_PATH" "$RUN_DIR/ground_truth.tum"
+  GT_RC=$?
+else
+  python3 "$REPO_ROOT/eval/prob_livo/pose_bag_to_tum.py" \
+    --bag "$BAG" --topic /leica/pose/relative --output "$RUN_DIR/ground_truth.tum" \
+    >"$RUN_DIR/ground_truth.log" 2>&1
+  GT_RC=$?
+fi
 if [[ -s "$RUN_DIR/trajectory.tum" && "$GT_RC" -eq 0 ]]; then
-  python3 "$REPO_ROOT/eval/prob_livo/eval_ntu_viral_official.py" \
-    "$RUN_DIR/trajectory.tum" "$RUN_DIR/ground_truth.tum" \
-    --out "$RUN_DIR/evaluation.yaml" >"$RUN_DIR/evaluation.log" 2>&1
+  if [[ "$DATASET_FAMILY" == "OXFORD" ]]; then
+    python3 "$REPO_ROOT/eval/prob_livo/eval_tum_translation.py" \
+      "$RUN_DIR/trajectory.tum" "$RUN_DIR/ground_truth.tum" \
+      --frame body --max-diff 0.05 --out "$RUN_DIR/evaluation.txt" \
+      >"$RUN_DIR/evaluation.log" 2>&1
+  else
+    python3 "$REPO_ROOT/eval/prob_livo/eval_ntu_viral_official.py" \
+      "$RUN_DIR/trajectory.tum" "$RUN_DIR/ground_truth.tum" \
+      --out "$RUN_DIR/evaluation.yaml" >"$RUN_DIR/evaluation.log" 2>&1
+  fi
   EVAL_RC=$?
 else
   EVAL_RC=2
