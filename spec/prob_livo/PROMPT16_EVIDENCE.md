@@ -12,7 +12,7 @@ This round is Oxford P-LIO only: camera off, `fast_native` input semantics, `Pro
 
 Owner correction recorded: the earlier statement interpreting 32 logical CPUs as 32 physical CPUs was wrong. Prompt16 diagnostic runs are authorized to use 32 logical CPUs (`0-31`) with TBB/OMP cap 32. This diagnostic runtime is not compared with Prompt15's 4-core formal results.
 
-All Prompt16 compilation was finally completed with `catkin_make -C /home/lc/super_livo -DCMAKE_BUILD_TYPE=Release -j4`. Earlier `-j32` and `-j16` attempts exhausted the 31 GiB RAM + 2 GiB swap machine and caused VSCode/cpptools and a compiler process to be OOM-killed; no offline/test run was launched concurrently by the agent. Future compilation is restricted to `-j4`.
+All Prompt16 compilation was finally completed with `catkin_make -C /home/lc/super_livo -DCMAKE_BUILD_TYPE=Release -j4`. Earlier `-j32` and `-j16` attempts exhausted the 31 GiB RAM + 2 GiB swap machine and caused compiler processes to be OOM-killed; no offline/test run was launched concurrently by the agent. Future compilation is restricted to `-j4`.
 
 ## Corrected configuration
 
