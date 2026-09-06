@@ -5,6 +5,7 @@ int RunI2SchedulerTests(TestContext &context);
 int RunI2InitializationTests(TestContext &context);
 int RunI2PropagationTests(TestContext &context);
 int RunI2UndistortionTests(TestContext &context);
+int RunI2LatePointTests(TestContext &context);
 int RunI2ContinuityTests(TestContext &context);
 int RunI2LifecycleHandoffTests(TestContext &context);
 int RunI2SchedulerImuBufferTests(TestContext &context);
@@ -24,6 +25,10 @@ int main() {
   prob_livo_test::RunI2UndistortionTests(undistort);
   undistort.Print("G-I2.5/G-I2.6 undistortion and identity");
 
+  prob_livo_test::TestContext late_point;
+  prob_livo_test::RunI2LatePointTests(late_point);
+  late_point.Print("G-P17.1/G-P17.2 native late-point deskew");
+
   prob_livo_test::TestContext continuity;
   prob_livo_test::RunI2ContinuityTests(continuity);
   prob_livo_test::RunI2LifecycleHandoffTests(continuity);
@@ -31,6 +36,7 @@ int main() {
   continuity.Print("G-I2.7/G-I2.8/G-I2.9 continuity, camera cut, authority");
 
   return scheduler.Passed() && imu.Passed() && undistort.Passed() &&
+                 late_point.Passed() &&
                  continuity.Passed()
              ? 0
              : 1;

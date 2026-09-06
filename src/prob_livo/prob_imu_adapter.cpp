@@ -24,6 +24,20 @@ void SetFailure(ProbImuAdapter::Result &result, const std::string &message) {
   result.message = message;
 }
 
+PropagationSnapshot ExtrapolateTerminalMotion(
+    const PropagationSnapshot &terminal, double query_time) {
+  PropagationSnapshot extrapolated = terminal;
+  const double dt = query_time - terminal.timestamp;
+  extrapolated.timestamp = query_time;
+  extrapolated.rotation =
+      terminal.rotation * ExpSO3(terminal.angular_velocity * dt);
+  extrapolated.position =
+      terminal.position + terminal.velocity * dt +
+      0.5 * terminal.acceleration * dt * dt;
+  extrapolated.velocity = terminal.velocity + terminal.acceleration * dt;
+  return extrapolated;
+}
+
 }  // namespace
 
 bool ProbImuAdapter::ResolveEpochTiming(const LidarMeasureGroup &measures,
@@ -294,10 +308,8 @@ ProbImuAdapter::Result ProbImuAdapter::ProcessLioEpoch(
   for (const PointType &point : measures.pcl_proc_cur->points) {
     const double query_time = timing.point_time_origin +
                               static_cast<double>(point.curvature) / 1000.0;
-    if (!std::isfinite(query_time) ||
-        (options_.bridge_to_epoch_endpoint &&
-         query_time > timing.epoch_end + options_.time_tolerance)) {
-      SetFailure(result, "scheduler point time is outside the LIO epoch");
+    if (!std::isfinite(query_time)) {
+      SetFailure(result, "scheduler point time is non-finite");
       return result;
     }
   }
@@ -364,12 +376,7 @@ bool ProbImuAdapter::Undistort(const LidarMeasureGroup &measures,
     const double query_time = timing.point_time_origin +
                               static_cast<double>(input.curvature) / 1000.0;
     if (!std::isfinite(query_time)) {
-      message = "point query time is outside the propagated trace";
-      return false;
-    }
-    if (options_.bridge_to_epoch_endpoint &&
-        query_time > trace.back().timestamp + tolerance) {
-      message = "point query time is outside the propagated trace";
+      message = "point query time is non-finite";
       return false;
     }
     if (!options_.bridge_to_epoch_endpoint &&
@@ -434,6 +441,13 @@ bool ProbImuAdapter::Undistort(const LidarMeasureGroup &measures,
               interpolated.acceleration = tail.acceleration;
               interpolated.angular_velocity = tail.angular_velocity;
             }
+          } else if (query_time > trace.back().timestamp) {
+            // FAST-LIVO2's scheduler owns the shared state/covariance at T_e.
+            // A point sampled after T_e gets a temporary terminal-motion
+            // extrapolation only; this snapshot is never written to filter or
+            // lifecycle state.
+            interpolated =
+                ExtrapolateTerminalMotion(trace.back(), query_time);
           } else if (query_time >= trace.back().timestamp - tolerance) {
             interpolated = trace.back();
           } else {

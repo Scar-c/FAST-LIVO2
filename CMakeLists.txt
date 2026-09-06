@@ -214,6 +214,7 @@ add_executable(prob_livo_i2_tests
   tests/prob_livo/test_i2_scheduler_time.cpp
   tests/prob_livo/test_i2_imu.cpp
   tests/prob_livo/test_i2_undistort.cpp
+  tests/prob_livo/test_i2_late_point.cpp
   tests/prob_livo/test_i2_continuity.cpp
   tests/prob_livo/test_i2_lifecycle_handoff.cpp
   tests/prob_livo/test_i2_scheduler_imu_buffer.cpp

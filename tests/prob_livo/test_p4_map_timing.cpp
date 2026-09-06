@@ -65,8 +65,9 @@ int RunP4MapTimingTests(TestContext &context) {
                 "first RUN covariance is not finite");
   context.Record("G-P4.4 first_run_time", backend.filter_current_time());
 
-  // FAST-native retains the original endpoint-bounded point contract.  The
-  // Super post-endpoint exception must not leak into the native mode.
+  // FAST-native now uses the shared Prompt17 terminal-motion late-point
+  // semantics.  The scheduler endpoint remains authoritative while a point
+  // after it must not reject the complete epoch.
   StatesGroup native_state;
   prob_livo::ProbLioBackend native_backend(native_state,
                                            TestBackendOptions());
@@ -84,12 +85,16 @@ int RunP4MapTimingTests(TestContext &context) {
       MakeBackendEpoch(0.54, 0.55, run_imu, points, lookahead);
   native_run_packet.lidar_frame_beg_time = 0.48;
   native_run_packet.pcl_proc_cur->points.front().curvature = 80.0f;
-  context.Check(!native_backend.ProcessEpoch(native_run_packet),
-                "Super post-endpoint handling leaked into FAST-native mode");
+  context.Check(native_backend.ProcessEpoch(native_run_packet),
+                "FAST-native late-point correction rejected the epoch");
+  context.Check(std::abs(native_backend.filter_current_time() - 0.55) < 1e-12,
+                "FAST-native late-point correction moved the endpoint");
+  context.Check(native_backend.undistorted_scan()->size() == points.size(),
+                "FAST-native late-point correction changed scan cardinality");
 
   // Legacy Super does not consume the first IMU after the scan endpoint as a
   // look-ahead.  Keep this mode-specific seam covered without changing the
-  // FAST-native endpoint contract above.
+  // FAST-native terminal-motion contract above.
   StatesGroup legacy_state;
   auto legacy_options = TestBackendOptions();
   legacy_options.legacy_super_timing = true;
