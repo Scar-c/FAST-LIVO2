@@ -259,6 +259,22 @@ void LIVMapper::readParameters(ros::NodeHandle &nh)
                  false);
   nh.param<bool>("common/prob_livo_one_callback_step",
                  prob_livo_one_callback_step_, false);
+  nh.param<string>("common/prob_livo_bucket_policy",
+                   prob_livo_bucket_policy_name_, "native_blind_carry");
+  if (prob_livo_bucket_policy_name_ == "native_blind_carry")
+  {
+    prob_livo_strict_bucket_reclass_ = false;
+  }
+  else if (prob_livo_bucket_policy_name_ == "strict_reclass")
+  {
+    prob_livo_strict_bucket_reclass_ = true;
+  }
+  else
+  {
+    throw std::runtime_error(
+        "unknown common/prob_livo_bucket_policy: " +
+        prob_livo_bucket_policy_name_);
+  }
   nh.param<string>("common/prob_livo_trajectory_path",
                   prob_livo_trajectory_path_, "");
   nh.param<string>("evo/runtime_report_directory",
@@ -995,6 +1011,8 @@ void LIVMapper::writeBenchmarkReports(
            << "\n"
            << "camera_epochs: " << benchmark_runtime_counters_.camera_epochs
            << "\n"
+           << "livo_bucket_policy: " << prob_livo_bucket_policy_name_
+           << "\n"
            << "livo_current_bucket_points: "
            << benchmark_runtime_counters_.livo_current_bucket_points << "\n"
            << "livo_next_bucket_points: "
@@ -1116,6 +1134,8 @@ void LIVMapper::writeBenchmarkReports(
   // a separate report so it cannot be lost during teardown.
   std::ofstream bucket_output(prefix + ".bucket_counters.yaml");
   bucket_output << "schema_version: 1\n"
+                << "livo_bucket_policy: " << prob_livo_bucket_policy_name_
+                << "\n"
                 << "bucket_trace_epochs: " << livo_bucket_epoch_ << "\n"
                 << "livo_current_bucket_points: "
                 << benchmark_runtime_counters_.livo_current_bucket_points
@@ -1766,34 +1786,43 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
 
       if (!imu_selection_ok) return false;
 
-      // The next bucket is expressed relative to the previous LIO endpoint.
-      // Re-evaluate every carried point at the new camera endpoint instead of
-      // blindly promoting it to current. This is the only place where a
-      // carry-over point changes bucket ownership.
       const std::size_t carry_over_points = meas.pcl_proc_next->points.size();
       std::size_t carry_reclassified_current = 0;
       std::size_t carry_reclassified_next = 0;
-      PointCloudXYZI carried_points = *meas.pcl_proc_next;
-      PointCloudXYZI().swap(*meas.pcl_proc_cur);
-      PointCloudXYZI().swap(*meas.pcl_proc_next);
-      meas.pcl_proc_cur->reserve(carried_points.points.size());
-      meas.pcl_proc_next->reserve(carried_points.points.size());
-      for (const PointType &source : carried_points.points)
+      if (prob_livo_strict_bucket_reclass_)
       {
-        PointType rebased;
-        const prob_livo::LivoPointBucket bucket =
-            prob_livo::RebaseLivoCarryOverPoint(
-                source, meas.last_lio_update_time, m.lio_time, rebased);
-        if (bucket == prob_livo::LivoPointBucket::kCurrent)
+        // Strict policy is retained for the Prompt18 P1/P2 ablation. The
+        // next bucket is expressed relative to the previous endpoint, so
+        // carried points are reclassified against the new endpoint.
+        PointCloudXYZI carried_points = *meas.pcl_proc_next;
+        PointCloudXYZI().swap(*meas.pcl_proc_cur);
+        PointCloudXYZI().swap(*meas.pcl_proc_next);
+        meas.pcl_proc_cur->reserve(carried_points.points.size());
+        meas.pcl_proc_next->reserve(carried_points.points.size());
+        for (const PointType &source : carried_points.points)
         {
-          meas.pcl_proc_cur->points.push_back(rebased);
-          ++carry_reclassified_current;
+          PointType rebased;
+          const prob_livo::LivoPointBucket bucket =
+              prob_livo::RebaseLivoCarryOverPoint(
+                  source, meas.last_lio_update_time, m.lio_time, rebased);
+          if (bucket == prob_livo::LivoPointBucket::kCurrent)
+          {
+            meas.pcl_proc_cur->points.push_back(rebased);
+            ++carry_reclassified_current;
+          }
+          else
+          {
+            meas.pcl_proc_next->points.push_back(rebased);
+            ++carry_reclassified_next;
+          }
         }
-        else
-        {
-          meas.pcl_proc_next->points.push_back(rebased);
-          ++carry_reclassified_next;
-        }
+      }
+      else
+      {
+        // Canonical Prompt17/Native-compatible policy: preserve FAST-LIVO2's
+        // blind carry promotion exactly. No carry point is reclassified here.
+        *(meas.pcl_proc_cur) = *(meas.pcl_proc_next);
+        PointCloudXYZI().swap(*meas.pcl_proc_next);
       }
 
       int lid_frame_num = lid_raw_data_buffer.size();

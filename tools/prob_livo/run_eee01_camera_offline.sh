@@ -19,6 +19,7 @@ CAMERA_CONFIG="${PROB_LIVO_CAMERA_CONFIG:-$REPO_ROOT/config/camera_NTU_VIRAL.yam
 CPUSET="${PROB_LIVO_CPUSET:-0,2,4,6}"
 WORKERS="${PROB_LIVO_WORKERS:-4}"
 CAMERA_STRIDE="${PROB_LIVO_CAMERA_STRIDE:-1}"
+BUCKET_POLICY="${PROB_LIVO_BUCKET_POLICY:-native_blind_carry}"
 DATASET_FAMILY="${PROB_LIVO_DATASET_FAMILY:-NTU}"
 GT_PATH="${PROB_LIVO_GT_PATH:-}"
 
@@ -34,6 +35,10 @@ if [[ ! "$CAMERA_STRIDE" =~ ^[1-9][0-9]*$ ]]; then
   echo "ERR: PROB_LIVO_CAMERA_STRIDE must be a positive integer" >&2
   exit 2
 fi
+case "$BUCKET_POLICY" in
+  native_blind_carry|strict_reclass) ;;
+  *) echo "ERR: PROB_LIVO_BUCKET_POLICY must be native_blind_carry or strict_reclass" >&2; exit 2 ;;
+esac
 export PROB_LIVO_CAMERA_STRIDE="$CAMERA_STRIDE"
 
 if [[ ! -f "$BAG" || ! -f "$CONFIG" || \
@@ -99,6 +104,7 @@ else
   rosparam set /common/prob_livo_camera_vio false
 fi
 rosparam set /common/prob_livo_input_semantics "$INPUT_SEMANTICS"
+rosparam set /common/prob_livo_bucket_policy "$BUCKET_POLICY"
 rosparam set /prob_livo/visual_plane_gate "$VISUAL_GATE"
 rosparam set /common/prob_livo_trajectory_path "$RUN_DIR/trajectory.tum"
 rosparam set /imu/imu_en true
@@ -134,6 +140,7 @@ rosparam dump "$RUN_DIR/effective_rosparams.yaml"
   echo "logical_cpu_affinity: $CPUSET"
   echo "worker_limit: $WORKERS"
   echo "camera_stride: $CAMERA_STRIDE"
+  echo "bucket_policy: $BUCKET_POLICY"
   echo "build_type: Release"
   echo "build_flags: -O3 -march=native -mtune=native -funroll-loops FAST_LIVO_MP_PROC_NUM=4"
   echo "effective_rosparams: $RUN_DIR/effective_rosparams.yaml"

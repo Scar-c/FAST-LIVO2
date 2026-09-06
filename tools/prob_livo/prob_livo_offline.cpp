@@ -47,7 +47,8 @@ std::size_t PositiveSizeEnvironment(const char *name, std::size_t fallback) {
 void ConfigureRuntime(const std::string &output_directory,
                       const std::string &input_semantics,
                       const std::string &camera_mode,
-                      const std::string &visual_gate) {
+                      const std::string &visual_gate,
+                      const std::string &bucket_policy) {
   const bool camera_on = camera_mode != "off";
   const bool visual_on = camera_mode == "h1" || camera_mode == "h2";
   ros::param::set("/common/img_en", camera_on ? 1 : 0);
@@ -55,6 +56,7 @@ void ConfigureRuntime(const std::string &output_directory,
   ros::param::set("/common/prob_livo_backend", true);
   ros::param::set("/common/prob_livo_camera_vio", visual_on);
   ros::param::set("/common/prob_livo_input_semantics", input_semantics);
+  ros::param::set("/common/prob_livo_bucket_policy", bucket_policy);
   ros::param::set("/prob_livo/visual_plane_gate", visual_gate);
   ros::param::set("/common/prob_livo_trajectory_path",
                   output_directory + "/trajectory.tum");
@@ -79,10 +81,14 @@ int main(int argc, char **argv) {
   const std::string camera_mode = Environment("PROB_LIVO_CAMERA_MODE", "off");
   const std::string visual_gate = Environment(
       "PROB_LIVO_VISUAL_PLANE_GATE", "livo2_prob_3sigma");
+  const std::string bucket_policy = Environment(
+      "PROB_LIVO_BUCKET_POLICY", "native_blind_carry");
   const std::size_t camera_stride =
       PositiveSizeEnvironment("PROB_LIVO_CAMERA_STRIDE", 1);
   if (!IsCameraMode(camera_mode) ||
-      (visual_gate != "livo2_prob_3sigma" && visual_gate != "super_legacy")) {
+      (visual_gate != "livo2_prob_3sigma" && visual_gate != "super_legacy") ||
+      (bucket_policy != "native_blind_carry" &&
+       bucket_policy != "strict_reclass")) {
     std::cerr << "invalid PROB_LIVO_CAMERA_MODE or "
                  "PROB_LIVO_VISUAL_PLANE_GATE\n";
     return 2;
@@ -98,7 +104,7 @@ int main(int argc, char **argv) {
     return 2;
   }
   ConfigureRuntime(output_directory, input_semantics, camera_mode,
-                   visual_gate);
+                   visual_gate, bucket_policy);
   setenv("PROB_LIVO_BUCKET_TRACE_PATH",
          (output_directory + "/livo_bucket_trace.csv").c_str(), 1);
 
@@ -193,6 +199,7 @@ int main(int argc, char **argv) {
          << "image_seen: " << accounting.image_seen << "\n"
          << "image_dropped: " << accounting.image_dropped << "\n"
          << "image_stride: " << camera_stride << "\n"
+         << "bucket_policy: " << bucket_policy << "\n"
          << "other_messages: " << accounting.other_messages << "\n"
          << "first_bag_time: " << accounting.first_bag_time << "\n"
          << "last_bag_time: " << accounting.last_bag_time << "\n"
@@ -221,6 +228,7 @@ int main(int argc, char **argv) {
             << " image_read=" << accounting.image_read
             << " camera_mode=" << camera_mode
             << " visual_plane_gate=" << visual_gate
+            << " bucket_policy=" << bucket_policy
             << " tbb_max_parallelism=" << worker_limit
             << " omp_max_threads=" << omp_get_max_threads()
             << " speed_factor=" << accounting.speed_factor << "x\n";

@@ -200,6 +200,7 @@ public:
   bool prob_livo_backend_enabled_ = false;
   bool prob_livo_camera_vio_enabled_ = false;
   bool prob_livo_one_callback_step_ = false;
+  bool prob_livo_strict_bucket_reclass_ = false;
   bool prob_livo_first_scheduler_epoch_ = true;
   prob_livo::InputSemantics prob_livo_input_semantics_ =
       prob_livo::InputSemantics::kFastNative;
@@ -212,6 +213,7 @@ public:
   prob_livo::VisualPlaneGateMode prob_livo_visual_gate_mode_ =
       prob_livo::VisualPlaneGateMode::kLivo2Prob3sigma;
   std::string prob_livo_visual_gate_name_ = "livo2_prob_3sigma";
+  std::string prob_livo_bucket_policy_name_ = "native_blind_carry";
   std::string prob_livo_trajectory_path_;
   std::string benchmark_report_directory_;
   std::unique_ptr<prob_livo::ProbLioBackend> prob_livo_backend_;
