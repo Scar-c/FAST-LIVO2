@@ -1,0 +1,17 @@
+clean_order,original_order,run_id,arm,sequence,repetition,bucket_policy,stride,affinity,workers,status
+1,9,prompt19_clean_p0_College_03_r2,P0,College_03,2,native_blind_carry,1,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+2,10,prompt19_clean_p0s_Church_05_r2,P0S,Church_05,2,native_blind_carry,1,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+3,11,prompt19_clean_p0_Quarter_01_r2,P0,Quarter_01,2,native_blind_carry,1,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+4,12,prompt19_clean_p0s_Palace_01_r2,P0S,Palace_01,2,native_blind_carry,2,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+5,13,prompt19_clean_p0s_College_03_r2,P0S,College_03,2,native_blind_carry,2,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+6,14,prompt19_clean_p0_Church_05_r2,P0,Church_05,2,native_blind_carry,1,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+7,15,prompt19_clean_p0s_Quarter_01_r2,P0S,Quarter_01,2,native_blind_carry,2,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+8,16,prompt19_clean_p0_Palace_01_r2,P0,Palace_01,2,native_blind_carry,1,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+9,17,prompt19_clean_p0_Church_05_r3,P0,Church_05,3,native_blind_carry,1,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+10,18,prompt19_clean_p0s_College_03_r3,P0S,College_03,3,native_blind_carry,2,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+11,19,prompt19_clean_p0_Palace_01_r3,P0,Palace_01,3,native_blind_carry,1,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+12,20,prompt19_clean_p0s_Quarter_01_r3,P0S,Quarter_01,3,native_blind_carry,2,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+13,21,prompt19_clean_p0s_Church_05_r3,P0S,Church_05,3,native_blind_carry,1,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+14,22,prompt19_clean_p0_College_03_r3,P0,College_03,3,native_blind_carry,1,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+15,23,prompt19_clean_p0s_Palace_01_r3,P0S,Palace_01,3,native_blind_carry,2,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
+16,24,prompt19_clean_p0_Quarter_01_r3,P0,Quarter_01,3,native_blind_carry,1,0+2+4+6,4,PREDECLARED_SERIAL_CLEAN
