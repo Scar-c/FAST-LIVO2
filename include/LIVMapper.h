@@ -21,6 +21,7 @@ which is included as part of this source code package.
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 #include <nav_msgs/Path.h>
+#include <sensor_msgs/CompressedImage.h>
 #include <vikit/camera_loader.h>
 
 #include <fstream>
@@ -75,6 +76,10 @@ public:
   void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg_in);
   void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in);
   void img_cbk(const sensor_msgs::ImageConstPtr &msg_in);
+  void compressed_img_cbk(
+      const sensor_msgs::CompressedImage::ConstPtr &msg_in);
+  bool acceptImageCallback(double timestamp);
+  void processImageCallback(const sensor_msgs::ImageConstPtr &msg_in);
   void publish_img_rgb(const image_transport::Publisher &pubImage, VIOManagerPtr vio_manager);
   void publish_frame_world(const ros::Publisher &pubLaserCloudFullRes, VIOManagerPtr vio_manager);
   void publish_visual_sub_map(const ros::Publisher &pubSubVisualMap);
@@ -224,6 +229,7 @@ public:
   ros::Subscriber sub_pcl;
   ros::Subscriber sub_imu;
   ros::Subscriber sub_img;
+  ros::Subscriber sub_img_compressed;
   ros::Publisher pubLaserCloudFullRes;
   ros::Publisher pubNormal;
   ros::Publisher pubSubVisualMap;

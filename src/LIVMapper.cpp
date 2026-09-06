@@ -16,6 +16,9 @@ which is included as part of this source code package.
 #include "prob_livo/prob_lio_backend.h"
 #include <ros/callback_queue.h>
 
+#include <opencv2/imgcodecs.hpp>
+#include <sensor_msgs/image_encodings.h>
+
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -478,7 +481,19 @@ void LIVMapper::initializeSubscribersAndPublishers(ros::NodeHandle &nh, image_tr
             nh.subscribe(lid_topic, 200000, &LIVMapper::livox_pcl_cbk, this): 
             nh.subscribe(lid_topic, 200000, &LIVMapper::standard_pcl_cbk, this);
   sub_imu = nh.subscribe(imu_topic, 200000, &LIVMapper::imu_cbk, this);
-  if (img_en) sub_img = nh.subscribe(img_topic, 200000, &LIVMapper::img_cbk, this);
+  if (img_en) {
+    const std::string compressed_suffix = "/compressed";
+    const bool compressed =
+        img_topic.size() >= compressed_suffix.size() &&
+        img_topic.compare(img_topic.size() - compressed_suffix.size(),
+                          compressed_suffix.size(), compressed_suffix) == 0;
+    if (compressed) {
+      sub_img_compressed = nh.subscribe(
+          img_topic, 200000, &LIVMapper::compressed_img_cbk, this);
+    } else {
+      sub_img = nh.subscribe(img_topic, 200000, &LIVMapper::img_cbk, this);
+    }
+  }
   
   pubLaserCloudFullRes = nh.advertise<sensor_msgs::PointCloud2>("/cloud_registered", 100);
   pubNormal = nh.advertise<visualization_msgs::MarkerArray>("visualization_marker", 100);
@@ -1510,21 +1525,31 @@ cv::Mat LIVMapper::getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg)
 
 void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
 {
+  if (!msg_in || !acceptImageCallback(msg_in->header.stamp.toSec())) return;
+  processImageCallback(msg_in);
+}
+
+bool LIVMapper::acceptImageCallback(const double timestamp) {
   const std::size_t callback_index = online_camera_callback_index_++;
   ++benchmark_runtime_counters_.image_callbacks_received;
   if (!img_en) {
     ++benchmark_runtime_counters_.ignored_input_messages;
-    return;
+    return false;
   }
   if (callback_index % online_camera_stride_ != 0) {
     ++benchmark_runtime_counters_.ignored_input_messages;
-    return;
+    return false;
   }
   if (online_selected_camera_timestamps_.is_open()) {
     online_selected_camera_timestamps_ << std::setprecision(17)
-                                        << msg_in->header.stamp.toSec()
+                                        << timestamp
                                         << "\n";
   }
+  return true;
+}
+
+void LIVMapper::processImageCallback(
+    const sensor_msgs::ImageConstPtr &msg_in) {
   sensor_msgs::Image::Ptr msg(new sensor_msgs::Image(*msg_in));
   // if ((abs(msg->header.stamp.toSec() - last_timestamp_img) > 0.2 && last_timestamp_img > 0) || sync_jump_flag)
   // {
@@ -1592,6 +1617,31 @@ void LIVMapper::img_cbk(const sensor_msgs::ImageConstPtr &msg_in)
   // cout<<"last_timestamp_img:::"<<last_timestamp_img<<endl;
   mtx_buffer.unlock();
   sig_buffer.notify_all();
+}
+
+void LIVMapper::compressed_img_cbk(
+    const sensor_msgs::CompressedImage::ConstPtr &msg_in) {
+  if (!msg_in) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
+    return;
+  }
+  if (!acceptImageCallback(msg_in->header.stamp.toSec())) return;
+  if (msg_in->data.empty()) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
+    return;
+  }
+  const cv::Mat encoded(1, static_cast<int>(msg_in->data.size()), CV_8UC1,
+                        const_cast<unsigned char *>(msg_in->data.data()));
+  const cv::Mat decoded = cv::imdecode(encoded, cv::IMREAD_COLOR);
+  if (decoded.empty()) {
+    ++benchmark_runtime_counters_.ignored_input_messages;
+    return;
+  }
+  const sensor_msgs::ImagePtr image =
+      cv_bridge::CvImage(msg_in->header, sensor_msgs::image_encodings::BGR8,
+                         decoded)
+          .toImageMsg();
+  img_cbk(image);
 }
 
 bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
