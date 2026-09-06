@@ -91,7 +91,8 @@ ProbLioBackend::ProbLioBackend(StatesGroup &state, const Options &options)
     prompt16_trace_.open(path, std::ios::out | std::ios::trunc);
     if (prompt16_trace_.is_open()) {
       prompt16_trace_
-          << "backend_epoch,mode,epoch_start,epoch_end,imu_count,"
+          << "backend_epoch,mode,epoch_start,epoch_end,lidar_frame_beg_time,"
+             "lidar_frame_end_time,point_time_min,point_time_max,imu_count,"
              "imu_start,imu_end,raw_points,preprocessed_points,"
              "undistorted_points,downsampled_points,map_queries,"
              "map_query_successes,plane_candidates,valid_associations,"
@@ -169,6 +170,8 @@ void ProbLioBackend::BeginPrompt16Trace(const LidarMeasureGroup &measures,
   prompt16_trace_record_.mode =
       mode == SchedulerMode::kLivo ? "livo" : "lio";
   prompt16_trace_record_.epoch_start = measures.last_lio_update_time;
+  prompt16_trace_record_.lidar_frame_beg_time = measures.lidar_frame_beg_time;
+  prompt16_trace_record_.lidar_frame_end_time = measures.lidar_frame_end_time;
   if (!measures.measures.empty()) {
     prompt16_trace_record_.epoch_end = measures.measures.back().lio_time;
     for (const MeasureGroup &measure : measures.measures) {
@@ -186,6 +189,25 @@ void ProbLioBackend::BeginPrompt16Trace(const LidarMeasureGroup &measures,
     prompt16_trace_record_.raw_points = measures.lidar->size();
   if (measures.pcl_proc_cur != nullptr)
     prompt16_trace_record_.preprocessed_points = measures.pcl_proc_cur->size();
+  if (measures.pcl_proc_cur != nullptr &&
+      !measures.pcl_proc_cur->points.empty()) {
+    const double point_time_origin =
+        mode == SchedulerMode::kOnlyLio ? measures.lidar_frame_beg_time
+                                        : prompt16_trace_record_.epoch_start;
+    for (const PointType &point : measures.pcl_proc_cur->points) {
+      const double point_time =
+          point_time_origin + static_cast<double>(point.curvature) / 1000.0;
+      if (!std::isfinite(point_time)) continue;
+      if (!std::isfinite(prompt16_trace_record_.point_time_min))
+        prompt16_trace_record_.point_time_min = point_time;
+      prompt16_trace_record_.point_time_min =
+          std::min(prompt16_trace_record_.point_time_min, point_time);
+      if (!std::isfinite(prompt16_trace_record_.point_time_max))
+        prompt16_trace_record_.point_time_max = point_time;
+      prompt16_trace_record_.point_time_max =
+          std::max(prompt16_trace_record_.point_time_max, point_time);
+    }
+  }
   prompt16_trace_record_.state_finite = StateIsFinite();
   prompt16_trace_record_.covariance_finite = state_.cov.allFinite();
 }
@@ -199,6 +221,10 @@ void ProbLioBackend::FinishPrompt16Trace(bool success) {
                   << prompt16_trace_record_.mode << ","
                   << std::setprecision(17) << prompt16_trace_record_.epoch_start
                   << "," << prompt16_trace_record_.epoch_end << ","
+                  << prompt16_trace_record_.lidar_frame_beg_time << ","
+                  << prompt16_trace_record_.lidar_frame_end_time << ","
+                  << prompt16_trace_record_.point_time_min << ","
+                  << prompt16_trace_record_.point_time_max << ","
                   << prompt16_trace_record_.imu_count << ","
                   << prompt16_trace_record_.imu_start << ","
                   << prompt16_trace_record_.imu_end << ","

@@ -168,6 +168,10 @@ class ProbLioBackend {
     std::string mode;
     double epoch_start = std::numeric_limits<double>::quiet_NaN();
     double epoch_end = std::numeric_limits<double>::quiet_NaN();
+    double lidar_frame_beg_time = std::numeric_limits<double>::quiet_NaN();
+    double lidar_frame_end_time = std::numeric_limits<double>::quiet_NaN();
+    double point_time_min = std::numeric_limits<double>::quiet_NaN();
+    double point_time_max = std::numeric_limits<double>::quiet_NaN();
     std::size_t imu_count = 0;
     double imu_start = std::numeric_limits<double>::quiet_NaN();
     double imu_end = std::numeric_limits<double>::quiet_NaN();
