@@ -1,0 +1,14 @@
+dataset,sequence,lidar_hz,camera_hz,camera_lidar_ratio,lidar_count,camera_count,frozen_stride,decision
+NTU,eee_01,9.999735482,9.996892646,0.999715709,3987,3986,1,camera approximately LiDAR rate; no NTU stride benchmark
+NTU,eee_02,10.000190944,9.996913100,0.999672222,3210,3209,1,camera approximately LiDAR rate; no NTU stride benchmark
+NTU,eee_03,10.001138729,9.997059261,0.999592100,1814,1813,1,camera approximately LiDAR rate; no NTU stride benchmark
+NTU,nya_01,10.000633118,9.994578093,0.999394536,3950,3947,1,camera approximately LiDAR rate; no NTU stride benchmark
+NTU,nya_02,10.001657815,9.997088004,0.999543095,4287,4285,1,camera approximately LiDAR rate; no NTU stride benchmark
+NTU,nya_03,10.000055782,9.997111744,0.999705598,4094,4093,1,camera approximately LiDAR rate; no NTU stride benchmark
+NTU,sbs_01,10.000772058,9.997030348,0.999625858,3542,3540,1,camera approximately LiDAR rate; no NTU stride benchmark
+NTU,sbs_02,10.000723266,9.997010313,0.999628732,3732,3731,1,camera approximately LiDAR rate; no NTU stride benchmark
+NTU,sbs_03,10.000492984,9.997070945,0.999657813,3893,3891,1,camera approximately LiDAR rate; no NTU stride benchmark
+OXFORD,Church_05,10.008621635,4.951274217,0.494700909,8007,3961,1,camera slower than LiDAR; negative-control stride=1
+OXFORD,College_03,10.026481725,19.866012775,1.981354309,2867,5682,2,camera approximately 2x LiDAR
+OXFORD,Palace_01,10.031552174,19.901360620,1.983876500,4052,8041,2,camera approximately 2x LiDAR
+OXFORD,Quarter_01,10.014283335,19.882478589,1.985412028,2894,5746,2,camera approximately 2x LiDAR

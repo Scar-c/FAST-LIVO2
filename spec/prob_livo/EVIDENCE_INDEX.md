@@ -557,3 +557,17 @@ true-late Palace P-LIO online and offline runs have identical trajectory SHA,
 trace SHA, counters, late-point telemetry, and ATE. Final 4-core canonical
 verification passes P-LIO Church/Palace/Quarter and P-LIVO Church/College_03.
 No P-LIVO tuning or stride change was made.
+
+## Prompt 18 Evidence
+
+Prompt18 is registered at
+`/home/lc/super_livo/prompts/Prompt 18 — Oxford P-LIVO Bucket Corrective + Stride Ablation.md`.
+The complete report is
+[`PROMPT18_EVIDENCE.md`](PROMPT18_EVIDENCE.md), with run ledger
+[`PROMPT18_RUN_LEDGER.csv`](PROMPT18_RUN_LEDGER.csv) and frozen rate audit
+[`PROMPT18_RATE_AUDIT.csv`](PROMPT18_RATE_AUDIT.csv).
+
+Final status: `PROMPT18 BUCKET CLOSED / STRIDE OWNER DECISION REQUIRED`.
+The Prob-LIVO current/next corrective is closed and the Oxford stride axis is
+complete. The report explicitly retains the Native blind-carry mismatch as an
+owner decision; no point-by-point Native==Prob claim is made.

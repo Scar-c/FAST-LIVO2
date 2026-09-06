@@ -313,3 +313,26 @@ statistics, and ATE. The final 4-core canonical P-LIO Church/Palace/Quarter
 and P-LIVO Church/College_03 checks all pass. Prompt17 is
 `PROMPT17 CLOSED — NATIVE LATE-POINT SEMANTICS RESTORED`; no P-LIVO tuning or
 visual stride change was performed.
+
+## Prompt 18 / Oxford P-LIVO bucket corrective and stride ablation
+
+Prompt18 freezes the Oxford camera/LiDAR rate audit, repairs Prob-LIVO
+current/next bucket ownership with carry reclassification, and evaluates the
+camera stride axis on Church_05, College_03, Palace_01, and Quarter_01. The
+canonical 4-core batches contain P0/P1/P2 and reused Prompt15 N0 plus new N1
+cells, each with three repetitions. The corrective removes current-bucket
+future points on College, Palace, and Quarter; all formal backend rejection
+counters remain zero. The P-LIO Palace regression remains exactly `0.1272 m`.
+
+The online compressed-camera transport path and offline path agree on selected
+timestamps, bucket semantic hashes, scheduler/backend counters, trajectory
+timestamps, and visual process calls for both high-rate Quarter checks. The
+P1 visual commit count differs by eight under the accepted 4-core visual
+numerical nondeterminism envelope; no byte-identical trajectory claim is made
+for that pair. P2 has exact visual-call and commit counts.
+
+Prompt18 final status is
+`PROMPT18 BUCKET CLOSED / STRIDE OWNER DECISION REQUIRED`: Native still uses
+blind carry promotion, so the forbidden point-by-point Native current/next
+identity was not claimed. No NTU stride benchmark, Prompt15 full rerun, P5,
+I8, or new Prompt18 H1/H2 ablation was started.
