@@ -6,6 +6,7 @@
 #include <tbb/parallel_for.h>
 
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <iomanip>
 #include <limits>
@@ -55,6 +56,18 @@ bool ToImuSample(const sensor_msgs::Imu::ConstPtr &message, ImuSample &sample) {
          sample.angular_velocity.allFinite();
 }
 
+std::string EscapeCsv(const std::string &value) {
+  std::string escaped;
+  escaped.reserve(value.size() + 2);
+  escaped.push_back('"');
+  for (const char character : value) {
+    if (character == '"') escaped.push_back('"');
+    escaped.push_back(character);
+  }
+  escaped.push_back('"');
+  return escaped;
+}
+
 }  // namespace
 
 ProbLioBackend::ProbLioBackend(StatesGroup &state, const Options &options)
@@ -68,6 +81,25 @@ ProbLioBackend::ProbLioBackend(StatesGroup &state, const Options &options)
       plane_provider_(*map_) {
   map_->SetCovStoragePrecision(options_.cov_storage_precision);
   downsample_filter_.setLeafSize(static_cast<float>(options_.voxel_size));
+
+  const char *trace_path = std::getenv("PROB_LIVO_PROMPT16_TRACE_PATH");
+  if (trace_path != nullptr && *trace_path != '\0') {
+    const std::filesystem::path path(trace_path);
+    std::error_code error;
+    if (path.has_parent_path())
+      std::filesystem::create_directories(path.parent_path(), error);
+    prompt16_trace_.open(path, std::ios::out | std::ios::trunc);
+    if (prompt16_trace_.is_open()) {
+      prompt16_trace_
+          << "backend_epoch,mode,epoch_start,epoch_end,imu_count,"
+             "imu_start,imu_end,raw_points,preprocessed_points,"
+             "undistorted_points,downsampled_points,map_queries,"
+             "map_query_successes,plane_candidates,valid_associations,"
+             "accepted_p2p,map_covariances_checked,map_covariances_invalid,"
+             "state_finite,covariance_finite,process_success,"
+             "trajectory_output_gate,error\n";
+    }
+  }
 
   if (!options_.trajectory_path.empty()) {
     const std::filesystem::path path(options_.trajectory_path);
@@ -125,57 +157,130 @@ ProbLioBackend::~ProbLioBackend() {
     }
   }
   if (trajectory_.is_open()) trajectory_.close();
+  if (prompt16_trace_.is_open()) prompt16_trace_.close();
+}
+
+void ProbLioBackend::BeginPrompt16Trace(const LidarMeasureGroup &measures,
+                                        SchedulerMode mode) {
+  if (!prompt16_trace_.is_open()) return;
+  prompt16_trace_record_ = Prompt16TraceRecord();
+  prompt16_trace_active_ = true;
+  prompt16_trace_record_.backend_epoch = counters_.backend_epochs_attempted;
+  prompt16_trace_record_.mode =
+      mode == SchedulerMode::kLivo ? "livo" : "lio";
+  prompt16_trace_record_.epoch_start = measures.last_lio_update_time;
+  if (!measures.measures.empty()) {
+    prompt16_trace_record_.epoch_end = measures.measures.back().lio_time;
+    for (const MeasureGroup &measure : measures.measures) {
+      prompt16_trace_record_.imu_count += measure.imu.size();
+      if (!measure.imu.empty()) {
+        const double first = measure.imu.front()->header.stamp.toSec();
+        const double last = measure.imu.back()->header.stamp.toSec();
+        if (!std::isfinite(prompt16_trace_record_.imu_start))
+          prompt16_trace_record_.imu_start = first;
+        prompt16_trace_record_.imu_end = last;
+      }
+    }
+  }
+  if (measures.lidar != nullptr)
+    prompt16_trace_record_.raw_points = measures.lidar->size();
+  if (measures.pcl_proc_cur != nullptr)
+    prompt16_trace_record_.preprocessed_points = measures.pcl_proc_cur->size();
+  prompt16_trace_record_.state_finite = StateIsFinite();
+  prompt16_trace_record_.covariance_finite = state_.cov.allFinite();
+}
+
+void ProbLioBackend::FinishPrompt16Trace(bool success) {
+  if (!prompt16_trace_active_) return;
+  prompt16_trace_record_.process_success = success;
+  prompt16_trace_record_.state_finite = StateIsFinite();
+  prompt16_trace_record_.covariance_finite = state_.cov.allFinite();
+  prompt16_trace_ << prompt16_trace_record_.backend_epoch << ","
+                  << prompt16_trace_record_.mode << ","
+                  << std::setprecision(17) << prompt16_trace_record_.epoch_start
+                  << "," << prompt16_trace_record_.epoch_end << ","
+                  << prompt16_trace_record_.imu_count << ","
+                  << prompt16_trace_record_.imu_start << ","
+                  << prompt16_trace_record_.imu_end << ","
+                  << prompt16_trace_record_.raw_points << ","
+                  << prompt16_trace_record_.preprocessed_points << ","
+                  << prompt16_trace_record_.undistorted_points << ","
+                  << prompt16_trace_record_.downsampled_points << ","
+                  << prompt16_trace_record_.map_queries << ","
+                  << prompt16_trace_record_.map_query_successes << ","
+                  << prompt16_trace_record_.plane_candidates << ","
+                  << prompt16_trace_record_.valid_associations << ","
+                  << prompt16_trace_record_.accepted_p2p << ","
+                  << prompt16_trace_record_.map_covariances_checked << ","
+                  << prompt16_trace_record_.map_covariances_invalid << ","
+                  << (prompt16_trace_record_.state_finite ? 1 : 0) << ","
+                  << (prompt16_trace_record_.covariance_finite ? 1 : 0) << ","
+                  << (prompt16_trace_record_.process_success ? 1 : 0) << ","
+                  << (prompt16_trace_record_.trajectory_output_gate ? 1 : 0)
+                  << "," << EscapeCsv(prompt16_trace_record_.error) << "\n";
+  prompt16_trace_.flush();
+  prompt16_trace_active_ = false;
+}
+
+bool ProbLioBackend::StateIsFinite() const {
+  return state_.rot_end.allFinite() && state_.pos_end.allFinite() &&
+         state_.vel_end.allFinite() && state_.bias_g.allFinite() &&
+         state_.bias_a.allFinite() && state_.gravity.allFinite() &&
+         std::isfinite(state_.inv_expo_time);
 }
 
 bool ProbLioBackend::ProcessEpoch(LidarMeasureGroup &measures,
                                   SchedulerMode mode) {
   ++counters_.backend_epochs_attempted;
   last_error_.clear();
+  BeginPrompt16Trace(measures, mode);
   const auto reject = [this](const std::string &message) {
     SetError(message);
-    ++counters_.backend_epochs_rejected;
     return false;
   };
+  bool success = false;
   const bool livo_mode = mode == SchedulerMode::kLivo;
   if (measures.measures.empty() || measures.pcl_proc_cur == nullptr ||
       (!livo_mode && measures.lidar == nullptr)) {
-    return reject("Prob-LIO scheduler packet is incomplete");
-  }
-  const double epoch_end = measures.measures.back().lio_time;
-  if (!std::isfinite(epoch_end) || epoch_end < 0.0) {
-    return reject("Prob-LIO scheduler endpoint is invalid");
-  }
-
-  if (!anchor_seeded_) {
-    if (!lifecycle_.SeedSchedulerAnchor(measures)) {
-      return reject("cannot seed the Prob-LIO scheduler epoch anchor");
+    success = reject("Prob-LIO scheduler packet is incomplete");
+  } else {
+    const double epoch_end = measures.measures.back().lio_time;
+    if (!std::isfinite(epoch_end) || epoch_end < 0.0) {
+      success = reject("Prob-LIO scheduler endpoint is invalid");
+    } else if (!anchor_seeded_) {
+      if (!lifecycle_.SeedSchedulerAnchor(measures)) {
+        success = reject("cannot seed the Prob-LIO scheduler epoch anchor");
+      } else {
+        anchor_seeded_ = true;
+      }
     }
-    anchor_seeded_ = true;
-  }
-  if (std::abs(measures.last_lio_update_time -
-               lifecycle_.scheduler_epoch_anchor()) > 2e-8) {
-    return reject("scheduler epoch anchor was mutated outside lifecycle authority");
-  }
-
-  bool success = false;
-  switch (lifecycle_.lifecycle()) {
-    case ProbLioLifecycle::IMU_INIT:
-      success = ProcessImuInit(measures, epoch_end, mode);
-      break;
-    case ProbLioLifecycle::MAP_INIT:
-      success = ProcessMapInit(measures, epoch_end, mode);
-      break;
-    case ProbLioLifecycle::RUN:
-      success = ProcessRun(measures, epoch_end, mode);
-      break;
-    default:
-      return reject("unknown Prob-LIO lifecycle state");
+    if (success == false && last_error_.empty() &&
+        std::abs(measures.last_lio_update_time -
+                 lifecycle_.scheduler_epoch_anchor()) > 2e-8) {
+      success = reject(
+          "scheduler epoch anchor was mutated outside lifecycle authority");
+    } else if (last_error_.empty()) {
+      switch (lifecycle_.lifecycle()) {
+        case ProbLioLifecycle::IMU_INIT:
+          success = ProcessImuInit(measures, epoch_end, mode);
+          break;
+        case ProbLioLifecycle::MAP_INIT:
+          success = ProcessMapInit(measures, epoch_end, mode);
+          break;
+        case ProbLioLifecycle::RUN:
+          success = ProcessRun(measures, epoch_end, mode);
+          break;
+        default:
+          success = reject("unknown Prob-LIO lifecycle state");
+      }
+    }
   }
   if (success) {
     ++counters_.backend_epochs_success;
   } else {
     ++counters_.backend_epochs_rejected;
   }
+  FinishPrompt16Trace(success);
   return success;
 }
 
@@ -253,6 +358,8 @@ bool ProbLioBackend::ProcessRun(LidarMeasureGroup &measures, double epoch_end,
   }
   undistorted_scan_ = result.prob_scan_undistort_imu;
   counters_.undistorted_points += undistorted_scan_->size();
+  if (prompt16_trace_active_)
+    prompt16_trace_record_.undistorted_points = undistorted_scan_->size();
 
   if (!BuildAndSolveScan()) return false;
   std::string adapter_error;
@@ -312,10 +419,14 @@ bool ProbLioBackend::InsertInitialMap(const PointCloudXYZI &raw_scan) {
         state_.cov.block<3, 3>(Layout::kRot0, Layout::kRot0),
         state_.cov.block<3, 3>(Layout::kPos0, Layout::kPos0),
         map_covariances_, options_.map_pose_cov_model);
+    if (prompt16_trace_active_)
+      prompt16_trace_record_.map_covariances_checked = map_covariances_.size();
     for (const auto &covariance : map_covariances_) {
       if (!LI2Sup::ValidateCovariance(
               covariance, options_.covariance_validation_mode,
               options_.map_covariance_validation_tolerance)) {
+        if (prompt16_trace_active_)
+          ++prompt16_trace_record_.map_covariances_invalid;
         SetError("initial map covariance failed validation");
         return false;
       }
@@ -336,6 +447,8 @@ bool ProbLioBackend::BuildAndSolveScan() {
   downsample_filter_.setInputCloud(undistorted_scan_);
   downsample_filter_.filter(downsampled_scan_);
   counters_.downsampled_points += downsampled_scan_->size();
+  if (prompt16_trace_active_)
+    prompt16_trace_record_.downsampled_points = downsampled_scan_->size();
 
   points_body_.resize(downsampled_scan_->size());
   tbb::parallel_for(
@@ -400,6 +513,7 @@ bool ProbLioBackend::BuildAndSolveScan() {
                     effect_mask_[index] = false;
                     continue;
                   }
+                  contribution.map_query_success = true;
 
                   LI2Sup::PlanePointsArray plane_points;
                   LI2Sup::PlaneCovsArray plane_covariances;
@@ -412,6 +526,7 @@ bool ProbLioBackend::BuildAndSolveScan() {
                       LI2Sup::SolvePlaneFitQr(plane_points, top_k.count);
                   effect_mask_[index] = fit.solved && fit.legacy_accepted;
                   if (!effect_mask_[index]) continue;
+                  contribution.plane_candidate = true;
                   const double scale = fit.q.norm();
                   plane_coefficients_[index] << fit.q / scale, 1.0 / scale;
 
@@ -436,6 +551,7 @@ bool ProbLioBackend::BuildAndSolveScan() {
                   effect_mask_[index] = false;
                   continue;
                 }
+                contribution.valid_association = true;
 
                 const Eigen::Vector3d normal = plane.head<3>();
                 const Eigen::Vector3d normal_body =
@@ -465,8 +581,10 @@ bool ProbLioBackend::BuildAndSolveScan() {
                   if (!probability_weight.valid) continue;
                   weight = probability_weight.weight;
                   contribution.weighted = true;
+                  contribution.accepted_p2p = true;
                 } else {
                   contribution.legacy = true;
+                  contribution.accepted_p2p = true;
                 }
                 contribution.hth =
                     jacobian * weight * jacobian.transpose();
@@ -483,6 +601,17 @@ bool ProbLioBackend::BuildAndSolveScan() {
           if (contribution.hknn_queried) {
             ++counters_.hknn_queries;
             counters_.hknn_returns += contribution.hknn_returns;
+          }
+          if (prompt16_trace_active_) {
+            if (contribution.hknn_queried) ++prompt16_trace_record_.map_queries;
+            if (contribution.map_query_success)
+              ++prompt16_trace_record_.map_query_successes;
+            if (contribution.plane_candidate)
+              ++prompt16_trace_record_.plane_candidates;
+            if (contribution.valid_association)
+              ++prompt16_trace_record_.valid_associations;
+            if (contribution.accepted_p2p)
+              ++prompt16_trace_record_.accepted_p2p;
           }
           if (contribution.qr_attempted) ++counters_.qr_attempted;
           if (contribution.qr_valid) ++counters_.qr_valid;
@@ -518,10 +647,14 @@ void ProbLioBackend::UpdateMap() {
         state_.cov.block<3, 3>(Layout::kRot0, Layout::kRot0),
         state_.cov.block<3, 3>(Layout::kPos0, Layout::kPos0),
         map_covariances_, options_.map_pose_cov_model);
+    if (prompt16_trace_active_)
+      prompt16_trace_record_.map_covariances_checked = map_covariances_.size();
     for (const auto &covariance : map_covariances_) {
       if (!LI2Sup::ValidateCovariance(
               covariance, options_.covariance_validation_mode,
               options_.map_covariance_validation_tolerance)) {
+        if (prompt16_trace_active_)
+          ++prompt16_trace_record_.map_covariances_invalid;
         SetError("map-update covariance failed validation");
         return;
       }
@@ -567,6 +700,8 @@ void ProbLioBackend::AppendTrajectory(double timestamp) {
               << quaternion.x() << " " << quaternion.y() << " "
               << quaternion.z() << " " << quaternion.w() << "\n";
   ++counters_.trajectory_rows;
+  if (prompt16_trace_active_)
+    prompt16_trace_record_.trajectory_output_gate = true;
   trajectory_.flush();
 }
 

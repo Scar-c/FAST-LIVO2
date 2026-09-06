@@ -153,7 +153,41 @@ class ProbLioBackend {
   void UpdateMap();
   void BuildWorldScan();
   void AppendTrajectory(double timestamp);
-  void SetError(const std::string &message) { last_error_ = message; }
+  void BeginPrompt16Trace(const LidarMeasureGroup &measures,
+                          SchedulerMode mode);
+  void FinishPrompt16Trace(bool success);
+  bool StateIsFinite() const;
+  void SetError(const std::string &message) {
+    last_error_ = message;
+    if (prompt16_trace_active_ && prompt16_trace_record_.error.empty())
+      prompt16_trace_record_.error = message;
+  }
+
+  struct Prompt16TraceRecord {
+    std::size_t backend_epoch = 0;
+    std::string mode;
+    double epoch_start = std::numeric_limits<double>::quiet_NaN();
+    double epoch_end = std::numeric_limits<double>::quiet_NaN();
+    std::size_t imu_count = 0;
+    double imu_start = std::numeric_limits<double>::quiet_NaN();
+    double imu_end = std::numeric_limits<double>::quiet_NaN();
+    std::size_t raw_points = 0;
+    std::size_t preprocessed_points = 0;
+    std::size_t undistorted_points = 0;
+    std::size_t downsampled_points = 0;
+    std::size_t map_queries = 0;
+    std::size_t map_query_successes = 0;
+    std::size_t plane_candidates = 0;
+    std::size_t valid_associations = 0;
+    std::size_t accepted_p2p = 0;
+    std::size_t map_covariances_checked = 0;
+    std::size_t map_covariances_invalid = 0;
+    bool state_finite = false;
+    bool covariance_finite = false;
+    bool process_success = false;
+    bool trajectory_output_gate = false;
+    std::string error;
+  };
 
   struct ObservationContribution {
     Matrix6 hth = Matrix6::Zero();
@@ -164,6 +198,10 @@ class ProbLioBackend {
     bool qr_valid = false;
     bool weighted = false;
     bool legacy = false;
+    bool map_query_success = false;
+    bool plane_candidate = false;
+    bool valid_association = false;
+    bool accepted_p2p = false;
   };
 
   StatesGroup &state_;
@@ -181,6 +219,9 @@ class ProbLioBackend {
   Counters counters_;
   std::string last_error_;
   std::ofstream trajectory_;
+  std::ofstream prompt16_trace_;
+  bool prompt16_trace_active_ = false;
+  Prompt16TraceRecord prompt16_trace_record_;
   bool has_initialization_snapshot_ = false;
   StatesGroup initialization_state_;
   double first_estimator_valid_epoch_ =
