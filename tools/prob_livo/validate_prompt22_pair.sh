@@ -4,18 +4,19 @@
 set -u
 set -o pipefail
 
-if [[ $# -ne 3 ]]; then
-  echo "usage: validate_prompt22_pair.sh NATIVE_RUN_DIR PROB_RUN_DIR lio|livo" >&2
+if [[ $# -ne 4 ]]; then
+  echo "usage: validate_prompt22_pair.sh NATIVE_RUN_DIR PROB_RUN_DIR lio|livo PROFILE" >&2
   exit 2
 fi
 
 NATIVE_DIR="$1"
 PROB_DIR="$2"
 MODE="$3"
+PROFILE="$4"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 python3 "$REPO_ROOT/tools/prob_livo/validate_prompt22_config.py" \
-  --native "$NATIVE_DIR" --prob "$PROB_DIR" --mode "$MODE"
+  --native "$NATIVE_DIR" --prob "$PROB_DIR" --profile "$PROFILE" --mode "$MODE"
 RC=$?
 if [[ "$RC" -ne 0 ]]; then
   exit "$RC"

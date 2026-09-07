@@ -100,6 +100,24 @@ CAMERA_KEYS = [
     "laserMapping/k4",
 ]
 
+# These values are deliberately forced by the formal runner or are inactive
+# in LIO mode. They remain in the normalized P/N document for pair identity,
+# but are not used to reject a source-authority profile audit.
+PROFILE_AUDIT_EXCLUDED = {
+    "common/img_en",
+    "publish/dense_map_en",
+    "publish/pub_effect_point_en",
+    "publish/pub_scan_num",
+    "publish/blind_rgb_points",
+    "pcd_save/pcd_save_en",
+    "pcd_save/type",
+    "pcd_save/colmap_output_en",
+    "pcd_save/filter_size_pcd",
+    "pcd_save/interval",
+    "image_save/img_save_en",
+    "image_save/interval",
+}
+
 
 def load(path: Path) -> dict[str, Any]:
     value = yaml.safe_load(path.read_text())
@@ -151,9 +169,16 @@ def write_artifacts(run_dir: Path, normalized: dict[str, Any], sha: str) -> None
     (run_dir / "shared_semantic_config.sha256").write_text(sha + "\n")
 
 
-def validate_pair(native: Path, prob: Path, include_camera: bool) -> tuple[str, dict[str, Any]]:
+def validate_pair(
+    native: Path,
+    prob: Path,
+    profile: Path,
+    include_camera: bool,
+    mode: str,
+) -> tuple[str, dict[str, Any]]:
     native_normalized = normalize(load(native / "effective_rosparams.yaml"), include_camera)
     prob_normalized = normalize(load(prob / "effective_rosparams.yaml"), include_camera)
+    profile_normalized = normalize(load(profile), include_camera)
     native_sha = digest(native_normalized)
     prob_sha = digest(prob_normalized)
     write_artifacts(native, native_normalized, native_sha)
@@ -165,6 +190,18 @@ def validate_pair(native: Path, prob: Path, include_camera: bool) -> tuple[str, 
         raise ValueError("CONFIG_IDENTITY_FAIL: " + ",".join(differences))
     if native_sha != prob_sha:
         raise ValueError("CONFIG_IDENTITY_FAIL: normalized SHA mismatch")
+    audit_excluded = set(PROFILE_AUDIT_EXCLUDED)
+    if mode == "lio":
+        audit_excluded.update(CAMERA_KEYS)
+    for key, expected in profile_normalized.items():
+        if key in audit_excluded:
+            continue
+        if native_normalized[key] != expected or prob_normalized[key] != expected:
+            raise ValueError(
+                "CONFIG_IDENTITY_FAIL: authority mismatch "
+                f"{key}: expected={expected!r} native={native_normalized[key]!r} "
+                f"prob={prob_normalized[key]!r}"
+            )
     return native_sha, native_normalized
 
 
@@ -183,17 +220,22 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--native", type=Path)
     parser.add_argument("--prob", type=Path)
+    parser.add_argument("--profile", type=Path)
     parser.add_argument("--mode", choices=["lio", "livo"])
     parser.add_argument("--mutation-test", action="store_true")
     args = parser.parse_args()
-    if not args.mutation_test and (args.native is None or args.prob is None or args.mode is None):
-        parser.error("--native, --prob and --mode are required unless --mutation-test is used")
+    if not args.mutation_test and (
+        args.native is None or args.prob is None or args.profile is None or args.mode is None
+    ):
+        parser.error("--native, --prob, --profile and --mode are required unless --mutation-test is used")
     if args.mutation_test:
         if args.native is None or args.prob is None or args.mode is None:
             parser.error("mutation test also requires --native, --prob and --mode")
         mutation_test(args.native, args.prob, args.mode == "livo")
         return 0
-    sha, normalized = validate_pair(args.native, args.prob, args.mode == "livo")
+    sha, normalized = validate_pair(
+        args.native, args.prob, args.profile, args.mode == "livo", args.mode
+    )
     print(f"PROMPT22 shared semantic identity: PASS sha256={sha} keys={len(normalized)}")
     return 0
 
