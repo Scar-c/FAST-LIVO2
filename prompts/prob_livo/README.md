@@ -14,6 +14,7 @@ P9 / I6  corrective closure: QR Jacobian, validity split, hot-path/radius cleanu
 P10 / I6  dead-code hygiene + native-LIO/Prob-LIO memory characterization
 I7       downsample ablation cancelled; Super VoxelGridClosest frozen
 I8       generalization
+P21 / I8  visual lifetime authority + NTU/Oxford matrix closure
 ```
 
 Prompt 4 / I3 is the Super-input parity corrective for `eee_01`; it does not
@@ -79,3 +80,14 @@ The complete Prompt 19 report is in
 `spec/prob_livo/PROMPT19_EVIDENCE.md`, with row-level measurements in
 `spec/prob_livo/PROMPT19_RUN_LEDGER.csv`. Prompt 19 is
 `PROMPT19 CLOSED — CANONICAL STRIDE + RESOURCE COMPARISON COMPLETE`.
+
+The exact Prompt 21 source is registered at
+`prompts/prob_livo/prompt21_visual_lifetime_matrix_close.md` (source SHA256
+`b661cab07bef548258c980fbf628de630d0757d69beb5cfde167510cc31524c0`).
+Prompt 21 makes visual-parent lifetime follow actual Super geometry-parent
+eviction; it does not add a second visual LRU or claim a memory reduction.
+The complete report is in `spec/prob_livo/PROMPT21_EVIDENCE.md`, and the
+accepted cell-level audit is in `spec/prob_livo/PROMPT21_FINAL_MATRIX.csv`.
+
+This repository has no top-level `prompts/README.md`; this
+`prompts/prob_livo/README.md` is the maintained prompt index.
