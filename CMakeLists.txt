@@ -372,6 +372,30 @@ target_link_libraries(prob_livo_i7_visual_memory_tests
   ${OpenMP_CXX_FLAGS}
 )
 
+# Prompt21 production-seam test. This uses the actual Super-native geometry
+# parent LRU/capacity implementation and verifies the exact victim key bridges
+# to the visual owner teardown; it is not a standalone visual LRU test.
+add_executable(prob_livo_i8_visual_lifetime_tests
+  tests/prob_livo/test_i8_visual_parent_eviction.cpp
+)
+target_compile_definitions(prob_livo_i8_visual_lifetime_tests PRIVATE
+  FAST_LIVO_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+target_include_directories(prob_livo_i8_visual_lifetime_tests PRIVATE
+  include/prob_livo/super_native
+)
+target_link_libraries(prob_livo_i8_visual_lifetime_tests
+  vio
+  lio
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Sophus_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${TBB_LIBRARY}
+  ${OpenMP_CXX_FLAGS}
+)
+
 # Add the main executable
 add_executable(fastlivo_mapping src/main.cpp)
 

@@ -21,7 +21,6 @@ WORKERS="${PROB_LIVO_WORKERS:-4}"
 CAMERA_STRIDE="${PROB_LIVO_CAMERA_STRIDE:-1}"
 BUCKET_POLICY="${PROB_LIVO_BUCKET_POLICY:-native_blind_carry}"
 VISUAL_MEMORY_STAGE="${PROB_LIVO_VISUAL_MEMORY_STAGE:-current}"
-VISUAL_PARENT_LRU_CAPACITY="${PROB_LIVO_VISUAL_PARENT_LRU_CAPACITY:-1000000}"
 DATASET_FAMILY="${PROB_LIVO_DATASET_FAMILY:-NTU}"
 GT_PATH="${PROB_LIVO_GT_PATH:-}"
 
@@ -42,13 +41,9 @@ case "$BUCKET_POLICY" in
   *) echo "ERR: PROB_LIVO_BUCKET_POLICY must be native_blind_carry or strict_reclass" >&2; exit 2 ;;
 esac
 case "$VISUAL_MEMORY_STAGE" in
-  current|leak_fix|parent_lru) ;;
+  current|leak_fix|parent_owned) ;;
   *) echo "ERR: invalid PROB_LIVO_VISUAL_MEMORY_STAGE" >&2; exit 2 ;;
 esac
-if [[ ! "$VISUAL_PARENT_LRU_CAPACITY" =~ ^[1-9][0-9]*$ ]]; then
-  echo "ERR: PROB_LIVO_VISUAL_PARENT_LRU_CAPACITY must be positive" >&2
-  exit 2
-fi
 export PROB_LIVO_CAMERA_STRIDE="$CAMERA_STRIDE"
 
 if [[ ! -f "$BAG" || ! -f "$CONFIG" || \
@@ -116,7 +111,6 @@ fi
 rosparam set /common/prob_livo_input_semantics "$INPUT_SEMANTICS"
 rosparam set /common/prob_livo_bucket_policy "$BUCKET_POLICY"
 rosparam set /common/prob_livo_visual_memory_stage "$VISUAL_MEMORY_STAGE"
-rosparam set /common/prob_livo_visual_parent_lru_capacity "$VISUAL_PARENT_LRU_CAPACITY"
 rosparam set /prob_livo/visual_plane_gate "$VISUAL_GATE"
 rosparam set /common/prob_livo_trajectory_path "$RUN_DIR/trajectory.tum"
 rosparam set /imu/imu_en true
@@ -154,7 +148,7 @@ rosparam dump "$RUN_DIR/effective_rosparams.yaml"
   echo "camera_stride: $CAMERA_STRIDE"
   echo "bucket_policy: $BUCKET_POLICY"
   echo "visual_memory_stage: $VISUAL_MEMORY_STAGE"
-  echo "visual_parent_lru_capacity: $VISUAL_PARENT_LRU_CAPACITY"
+  echo "visual_lifetime_authority: $([[ "$VISUAL_MEMORY_STAGE" == "parent_owned" ]] && echo super_geometry_parent_eviction || echo legacy_stage)"
   echo "build_type: Release"
   echo "build_flags: -O3 -march=native -mtune=native -funroll-loops FAST_LIVO_MP_PROC_NUM=4"
   echo "effective_rosparams: $RUN_DIR/effective_rosparams.yaml"
@@ -165,7 +159,6 @@ RUN_START_EPOCH=$(date +%s)
 set +e
 PROB_LIVO_WORKERS="$WORKERS" \
 PROB_LIVO_VISUAL_MEMORY_STAGE="$VISUAL_MEMORY_STAGE" \
-PROB_LIVO_VISUAL_PARENT_LRU_CAPACITY="$VISUAL_PARENT_LRU_CAPACITY" \
 taskset -c "$CPUSET" \
   rosrun fast_livo prob_livo_offline "$BAG" "$RUN_DIR" "$INPUT_SEMANTICS" \
   >"$RUN_DIR/node.log" 2>&1

@@ -89,38 +89,31 @@ void AddPoint(VisualParentRegistry &registry, const VOXEL_LOCATION &key,
   registry.addPoint(key, point, local_index);
 }
 
-void TestParentLruLifecycle()
+void TestParentOwnerLifecycle()
 {
-  VisualParentRegistry registry(2);
+  VisualParentRegistry registry;
   const VOXEL_LOCATION a(0, 0, 0);
   const VOXEL_LOCATION b(1, 0, 0);
-  const VOXEL_LOCATION c(2, 0, 0);
   for (uint8_t local = 0; local < 8; ++local) AddPoint(registry, a, local);
   AddPoint(registry, b, 0);
-  registry.getOrCreateForInsert(a);  // replacement/touch, without new child
-  const auto before_lookup = registry.lruOrderForTest();
   Require(registry.findNoTouch(a) != nullptr,
           "parent lookup finds a live host");
-  Require(before_lookup == registry.lruOrderForTest(),
-          "visual lookup does not touch parent LRU order");
   Require(registry.snapshot().visual_points == 9,
           "eight local subvoxels remain attached to one parent");
 
-  AddPoint(registry, c, 0);
-  Require(registry.lruOrderForTest().front() == c,
-          "new parent is the LRU representative");
-  registry.evictToCapacity({});
+  Require(registry.eraseBySuperEviction(b),
+          "geometry eviction erases the exact visual parent key");
   Require(registry.findNoTouch(b) == nullptr,
-          "least-recently-used parent is evicted");
+          "geometry-evicted host is no longer indexed");
   Require(registry.findNoTouch(a) != nullptr,
-          "touched representative is not evicted");
-  Require(registry.findNoTouch(c) != nullptr,
-          "new representative survives replacement");
-  Require(registry.snapshot().visual_points == 9,
-          "eviction releases all child points of one parent together");
+          "non-evicted parent remains owned");
+  Require(registry.snapshot().visual_points == 8,
+          "eviction releases the selected child state only");
+  Require(!registry.eraseBySuperEviction(b),
+          "repeated geometry callback cannot double-erase a host");
 
   const std::size_t live_before_clear = VisualPatch::live_bytes();
-  Require(live_before_clear > 0, "LRU hosts retain their Feature patches");
+  Require(live_before_clear > 0, "owned hosts retain their Feature patches");
   registry.clear({});
   Require(VisualPatch::live_bytes() == 0,
           "parent clear releases VisualPoints, Features, and patches");
@@ -134,7 +127,7 @@ int main()
 {
   TestUpdatePathUsesOwner();
   TestPatchOwnershipAccounting();
-  TestParentLruLifecycle();
-  std::cout << "PROMPT20 I7 visual memory tests passed\n";
+  TestParentOwnerLifecycle();
+  std::cout << "PROMPT21 I7 visual ownership tests passed\n";
   return 0;
 }

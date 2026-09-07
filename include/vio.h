@@ -105,6 +105,9 @@ struct VisualRuntimeCounters
   std::size_t photometric_update_accepted = 0;
   std::size_t visual_state_commits = 0;
   std::size_t visual_rollbacks = 0;
+  std::size_t geometry_parent_evictions = 0;
+  std::size_t visual_parent_eviction_erases = 0;
+  std::size_t visual_parent_eviction_misses = 0;
 };
 
 class VIOManager
@@ -162,7 +165,6 @@ public:
   VisualRuntimeCounters visual_counters_;
   std::string visual_lifecycle_path_;
   std::ofstream visual_lifecycle_output_;
-  std::size_t visual_parent_lru_capacity_ = 1000000;
   const VisualPlaneQuery *active_visual_plane_query_ = nullptr;
   prob_livo::VisualPlaneGateMode active_visual_gate_mode_ =
       prob_livo::VisualPlaneGateMode::kSuperLegacy;
@@ -176,6 +178,7 @@ public:
 
   VIOManager();
   ~VIOManager();
+  bool eraseVisualParentBySuperEviction(const Eigen::Vector3i &key);
   void setVisualLifecycleOutputPath(const std::string &path);
   void updateStateInverse(cv::Mat img, int level);
   void updateState(cv::Mat img, int level);

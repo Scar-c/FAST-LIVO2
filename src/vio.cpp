@@ -34,8 +34,8 @@ bool ParseVisualMemoryStage(const std::string &name,
     stage = VisualMemoryStage::kLeakFix;
     return true;
   }
-  if (name == "parent_lru") {
-    stage = VisualMemoryStage::kParentLru;
+  if (name == "parent_owned") {
+    stage = VisualMemoryStage::kParentOwned;
     return true;
   }
   return false;
@@ -46,7 +46,7 @@ const char *VisualMemoryStageName(VisualMemoryStage stage)
   switch (stage) {
     case VisualMemoryStage::kCurrent: return "current";
     case VisualMemoryStage::kLeakFix: return "leak_fix";
-    case VisualMemoryStage::kParentLru: return "parent_lru";
+    case VisualMemoryStage::kParentOwned: return "parent_owned";
   }
   return "unknown";
 }
@@ -54,7 +54,7 @@ const char *VisualMemoryStageName(VisualMemoryStage stage)
 }  // namespace
 
 VIOManager::VIOManager()
-    : visual_parent_registry_(1000000)
+    : visual_parent_registry_()
 {
   // downSizeFilter.setLeafSize(0.2, 0.2, 0.2);
 }
@@ -64,7 +64,7 @@ VIOManager::~VIOManager()
   delete visual_submap;
   for (auto& pair : warp_map) delete pair.second;
   warp_map.clear();
-  if (visual_memory_stage_ == VisualMemoryStage::kParentLru) {
+  if (visual_memory_stage_ == VisualMemoryStage::kParentOwned) {
     visual_parent_registry_.clear(
         [this](const VOXEL_LOCATION &key) { feat_map.erase(key); });
     feat_map.clear();
@@ -73,6 +73,24 @@ VIOManager::~VIOManager()
     feat_map.clear();
   }
   if (visual_lifecycle_output_.is_open()) visual_lifecycle_output_.close();
+}
+
+bool VIOManager::eraseVisualParentBySuperEviction(const Eigen::Vector3i &key)
+{
+  if (visual_memory_stage_ != VisualMemoryStage::kParentOwned) return false;
+
+  ++visual_counters_.geometry_parent_evictions;
+  const VOXEL_LOCATION visual_key(key.x(), key.y(), key.z());
+  // feat_map and visual_submap are borrowed views. The current-frame view is
+  // reset by processFrame before the next geometry epoch can evict a parent.
+  feat_map.erase(visual_key);
+  const bool erased = visual_parent_registry_.eraseBySuperEviction(visual_key);
+  if (erased) {
+    ++visual_counters_.visual_parent_eviction_erases;
+  } else {
+    ++visual_counters_.visual_parent_eviction_misses;
+  }
+  return erased;
 }
 
 void VIOManager::setVisualLifecycleOutputPath(const std::string &path)
@@ -86,13 +104,14 @@ void VIOManager::setVisualLifecycleOutputPath(const std::string &path)
     visual_lifecycle_output_
         << "visual_process_call,stage,parent_hosts,visual_points,features,"
            "observations,patch_bytes,vp_parent_max,feature_parent_max,"
-           "patch_parent_max,lru_capacity\n";
+           "patch_parent_max,geometry_parent_evictions,"
+           "visual_parent_eviction_erases,visual_parent_eviction_misses\n";
   }
 }
 
 VisualMemorySnapshot VIOManager::visual_memory_snapshot() const
 {
-  if (visual_memory_stage_ == VisualMemoryStage::kParentLru)
+  if (visual_memory_stage_ == VisualMemoryStage::kParentOwned)
     return visual_parent_registry_.snapshot();
   return SnapshotVisualIndex(feat_map);
 }
@@ -100,7 +119,7 @@ VisualMemorySnapshot VIOManager::visual_memory_snapshot() const
 void RecordVisualLifecycleSample(std::ofstream &output,
                                  VisualMemoryStage stage,
                                  std::size_t process_call,
-                                 std::size_t lru_capacity,
+                                 const VisualRuntimeCounters &counters,
                                  const VisualMemorySnapshot &snapshot)
 {
   if (!output.is_open()) return;
@@ -109,7 +128,9 @@ void RecordVisualLifecycleSample(std::ofstream &output,
          << snapshot.features << ',' << snapshot.observations << ','
          << snapshot.patch_bytes << ',' << snapshot.vp_parent_max << ','
          << snapshot.feature_parent_max << ',' << snapshot.patch_parent_max
-         << ',' << lru_capacity << '\n';
+         << ',' << counters.geometry_parent_evictions << ','
+         << counters.visual_parent_eviction_erases << ','
+         << counters.visual_parent_eviction_misses << '\n';
   output.flush();
 }
 
@@ -136,15 +157,6 @@ void VIOManager::initializeVIO()
         "unknown common/prob_livo_visual_memory_stage: " +
         visual_memory_stage_name);
   }
-  int visual_parent_lru_capacity = 1000000;
-  ros::param::param<int>("common/prob_livo_visual_parent_lru_capacity",
-                         visual_parent_lru_capacity, 1000000);
-  if (visual_parent_lru_capacity <= 0)
-    throw std::runtime_error("invalid visual parent LRU capacity");
-  visual_parent_lru_capacity_ =
-      static_cast<std::size_t>(visual_parent_lru_capacity);
-  visual_parent_registry_.setCapacity(visual_parent_lru_capacity_);
-
   visual_submap = new SubSparseMap;
 
   fx = cam->fx();
@@ -341,11 +353,11 @@ void VIOManager::insertPointIntoVoxelMap(VisualPoint *pt_new)
   }
   VOXEL_LOCATION position((int64_t)loc_xyz[0], (int64_t)loc_xyz[1], (int64_t)loc_xyz[2]);
   auto iter = feat_map.find(position);
-  if (visual_memory_stage_ == VisualMemoryStage::kParentLru)
+  if (visual_memory_stage_ == VisualMemoryStage::kParentOwned)
   {
     const uint8_t local_index = VisualParentLocalIndex(position, pt_w);
     VisualParentHost *host =
-        visual_parent_registry_.getOrCreateForInsert(position);
+        visual_parent_registry_.getOrCreate(position);
     if (iter == feat_map.end()) feat_map[position] = host;
     host->add(pt_new, local_index);
   }
@@ -2094,14 +2106,12 @@ void VIOManager::processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unor
   // visual_submap is a borrowed per-frame view.  Evict only after every use
   // in this frame has completed, and reset the borrowed view before deleting
   // parent-owned VisualPoints.
-  if (visual_memory_stage_ == VisualMemoryStage::kParentLru) {
+  if (visual_memory_stage_ == VisualMemoryStage::kParentOwned) {
     visual_submap->reset();
-    visual_parent_registry_.evictToCapacity(
-        [this](const VOXEL_LOCATION &key) { this->feat_map.erase(key); });
   }
   RecordVisualLifecycleSample(visual_lifecycle_output_, visual_memory_stage_,
                               visual_counters_.visual_process_calls,
-                              visual_parent_lru_capacity_,
+                              visual_counters_,
                               visual_memory_snapshot());
 
   frame_count++;

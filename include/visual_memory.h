@@ -8,7 +8,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <list>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -20,7 +19,7 @@ enum class VisualMemoryStage
 {
   kCurrent,
   kLeakFix,
-  kParentLru
+  kParentOwned
 };
 
 // Owns one complete photometric patch.  The owner is deliberately separate
@@ -96,47 +95,40 @@ struct VisualMemorySnapshot
   std::size_t patch_parent_max = 0;
 };
 
-// Parent-key owner registry matching Super's parent-key LRU semantics.  The
-// lookup method is intentionally non-touching; only insertion/replacement
-// may change LRU order.
+// Parent-key owner registry.  Geometry owns parent lifetime and calls
+// eraseBySuperEviction() with the exact evicted key.  This registry owns
+// visual children but deliberately has no independent capacity or LRU policy.
 class VisualParentRegistry
 {
 public:
-  explicit VisualParentRegistry(std::size_t capacity = 1000000);
+  VisualParentRegistry() = default;
   ~VisualParentRegistry();
 
   VisualParentRegistry(const VisualParentRegistry &) = delete;
   VisualParentRegistry &operator=(const VisualParentRegistry &) = delete;
 
   VisualParentHost *findNoTouch(const VOXEL_LOCATION &key) const;
-  VisualParentHost *getOrCreateForInsert(const VOXEL_LOCATION &key);
+  VisualParentHost *getOrCreate(const VOXEL_LOCATION &key);
   void addPoint(const VOXEL_LOCATION &key, VisualPoint *point,
                 uint8_t local_index);
 
+  // Called only by the real Super geometry parent eviction producer.  The
+  // caller removes borrowed indexes before this owner is destroyed.
+  bool eraseBySuperEviction(const VOXEL_LOCATION &key);
+
   // The callback must remove any borrowed index before the owned host is
-  // destroyed.  Host destruction then releases VisualPoints, Features,
+  // destroyed. Host destruction then releases VisualPoints, Features,
   // patches, observations, and image references in that order.
-  std::size_t evictToCapacity(
-      const std::function<void(const VOXEL_LOCATION &)> &before_destroy);
   void clear(const std::function<void(const VOXEL_LOCATION &)> &before_destroy = {});
 
   std::size_t size() const { return owners_.size(); }
-  std::size_t capacity() const { return capacity_; }
-  void setCapacity(std::size_t capacity);
-  std::vector<VOXEL_LOCATION> lruOrderForTest() const;
   VisualMemorySnapshot snapshot() const;
 
 private:
   using OwnerMap = std::unordered_map<
       VOXEL_LOCATION, std::unique_ptr<VisualParentHost>>;
 
-  std::size_t capacity_;
   OwnerMap owners_;
-  std::list<VOXEL_LOCATION> lru_;
-  std::unordered_map<VOXEL_LOCATION, std::list<VOXEL_LOCATION>::iterator>
-      lru_positions_;
-
-  void touch(const VOXEL_LOCATION &key);
 };
 
 VisualMemorySnapshot SnapshotVisualIndex(const VisualParentIndex &index);

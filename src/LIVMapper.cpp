@@ -172,7 +172,13 @@ LIVMapper::~LIVMapper() {
                << counters.photometric_update_accepted << "\n"
                << "visual_state_commits: " << counters.visual_state_commits
                << "\n"
-               << "visual_rollbacks: " << counters.visual_rollbacks << "\n";
+               << "visual_rollbacks: " << counters.visual_rollbacks << "\n"
+               << "geometry_parent_evictions: "
+               << counters.geometry_parent_evictions << "\n"
+               << "visual_parent_eviction_erases: "
+               << counters.visual_parent_eviction_erases << "\n"
+               << "visual_parent_eviction_misses: "
+               << counters.visual_parent_eviction_misses << "\n";
       }
     }
   }
@@ -465,6 +471,10 @@ void LIVMapper::initializeComponents()
     options.defer_trajectory_until_camera_epoch = slam_mode_ == LIVO;
     options.trajectory_path = prob_livo_trajectory_path_;
     prob_livo_backend_.reset(new prob_livo::ProbLioBackend(_state, options));
+    prob_livo_backend_->SetGeometryParentEvictionCallback(
+        [this](const Eigen::Vector3i &key) {
+          if (vio_manager) vio_manager->eraseVisualParentBySuperEviction(key);
+        });
   }
 }
 
@@ -1070,7 +1080,13 @@ void LIVMapper::writeBenchmarkReports(
                 << visual.photometric_update_accepted << "\n"
                 << "visual_state_commits: " << visual.visual_state_commits
                 << "\n"
-                << "visual_rollbacks: " << visual.visual_rollbacks << "\n";
+                << "visual_rollbacks: " << visual.visual_rollbacks << "\n"
+                << "geometry_parent_evictions: "
+                << visual.geometry_parent_evictions << "\n"
+                << "visual_parent_eviction_erases: "
+                << visual.visual_parent_eviction_erases << "\n"
+                << "visual_parent_eviction_misses: "
+                << visual.visual_parent_eviction_misses << "\n";
 
   std::ofstream timing(prefix + ".timing.yaml");
   timing << std::setprecision(17) << "schema_version: 2\n"

@@ -11,6 +11,7 @@
 #include <iostream>
 #include <execution>
 #include <filesystem>
+#include <functional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -251,6 +252,7 @@ public:
   using Points = std::vector<Point, Eigen::aligned_allocator<Point>>;
   using KNNHeapType = KNNHeap<5, Point>;
   using OctVoxType = OctVox<Point>;
+  using ParentEvictionCallback = std::function<void(const KEY &)>;
 
   struct Options {
     float resolution      = 0.5;   
@@ -297,6 +299,13 @@ public:
     inv_resolution_ = 1.0 / resolution_;
     sub_resolution_ = resolution_ / 2.0;
     sub_inv_resolution_ = 1.0 / sub_resolution_;
+  }
+
+  // The callback observes the actual geometry parent selected by this map's
+  // capacity/LRU producer. Visual lifetime consumers must not select a
+  // different victim or maintain a second eviction policy.
+  void SetParentEvictionCallback(ParentEvictionCallback callback) {
+    parent_eviction_callback_ = std::move(callback);
   }
 
   void insert(const Points& cloud_world);
@@ -382,6 +391,7 @@ private:
 
   std::vector<uint8_t*> flat_search_ptrs_;
   int group_idx_max_;
+  ParentEvictionCallback parent_eviction_callback_;
 
 };
 
@@ -417,8 +427,10 @@ void OctVoxMap<Point, Scalar>::insert(const Points& cloud_world){
       grids_.insert(std::make_pair(key, data_.begin()));
       
       if (data_.size() >= capacity_) {
-        grids_.erase(data_.back().first);
+        const KEY evicted_key = data_.back().first;
+        grids_.erase(evicted_key);
         data_.pop_back();
+        if (parent_eviction_callback_) parent_eviction_callback_(evicted_key);
       }
     } else {
       iter->second->second.AddPoint(pt, local_idx);
@@ -466,8 +478,10 @@ void OctVoxMap<Point, Scalar>::insert(const Points& cloud_world,
       }
       
       if (data_.size() >= capacity_) {
-        grids_.erase(data_.back().first);
+        const KEY evicted_key = data_.back().first;
+        grids_.erase(evicted_key);
         data_.pop_back();
+        if (parent_eviction_callback_) parent_eviction_callback_(evicted_key);
       }
     } else {
       if(use_cov){

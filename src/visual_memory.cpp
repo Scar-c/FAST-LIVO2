@@ -75,20 +75,7 @@ void VisualParentHost::add(VisualPoint *point, uint8_t local_index)
   ++count;
 }
 
-VisualParentRegistry::VisualParentRegistry(std::size_t capacity)
-    : capacity_(std::max<std::size_t>(1, capacity))
-{
-}
-
 VisualParentRegistry::~VisualParentRegistry() { clear(); }
-
-void VisualParentRegistry::touch(const VOXEL_LOCATION &key)
-{
-  const auto position = lru_positions_.find(key);
-  if (position == lru_positions_.end()) return;
-  lru_.splice(lru_.begin(), lru_, position->second);
-  position->second = lru_.begin();
-}
 
 VisualParentHost *VisualParentRegistry::findNoTouch(
     const VOXEL_LOCATION &key) const
@@ -97,20 +84,15 @@ VisualParentHost *VisualParentRegistry::findNoTouch(
   return found == owners_.end() ? nullptr : found->second.get();
 }
 
-VisualParentHost *VisualParentRegistry::getOrCreateForInsert(
+VisualParentHost *VisualParentRegistry::getOrCreate(
     const VOXEL_LOCATION &key)
 {
   const auto found = owners_.find(key);
-  if (found != owners_.end()) {
-    touch(key);
-    return found->second.get();
-  }
+  if (found != owners_.end()) return found->second.get();
 
   auto owner = std::make_unique<VisualParentHost>();
   VisualParentHost *host = owner.get();
   owners_.emplace(key, std::move(owner));
-  lru_.push_front(key);
-  lru_positions_[key] = lru_.begin();
   return host;
 }
 
@@ -118,45 +100,22 @@ void VisualParentRegistry::addPoint(const VOXEL_LOCATION &key,
                                      VisualPoint *point,
                                      uint8_t local_index)
 {
-  getOrCreateForInsert(key)->add(point, local_index);
+  getOrCreate(key)->add(point, local_index);
 }
 
-std::size_t VisualParentRegistry::evictToCapacity(
-    const std::function<void(const VOXEL_LOCATION &)> &before_destroy)
+bool VisualParentRegistry::eraseBySuperEviction(const VOXEL_LOCATION &key)
 {
-  std::size_t evicted = 0;
-  while (owners_.size() > capacity_ && !lru_.empty()) {
-    const VOXEL_LOCATION key = lru_.back();
-    lru_.pop_back();
-    lru_positions_.erase(key);
-    if (before_destroy) before_destroy(key);
-    owners_.erase(key);
-    ++evicted;
-  }
-  return evicted;
+  return owners_.erase(key) != 0;
 }
 
 void VisualParentRegistry::clear(
     const std::function<void(const VOXEL_LOCATION &)> &before_destroy)
 {
-  while (!lru_.empty()) {
-    const VOXEL_LOCATION key = lru_.back();
-    lru_.pop_back();
-    lru_positions_.erase(key);
+  for (const auto &entry : owners_) {
+    const VOXEL_LOCATION &key = entry.first;
     if (before_destroy) before_destroy(key);
-    owners_.erase(key);
   }
   owners_.clear();
-}
-
-void VisualParentRegistry::setCapacity(std::size_t capacity)
-{
-  capacity_ = std::max<std::size_t>(1, capacity);
-}
-
-std::vector<VOXEL_LOCATION> VisualParentRegistry::lruOrderForTest() const
-{
-  return std::vector<VOXEL_LOCATION>(lru_.begin(), lru_.end());
 }
 
 VisualMemorySnapshot VisualParentRegistry::snapshot() const

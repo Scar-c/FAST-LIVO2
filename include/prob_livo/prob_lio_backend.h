@@ -12,9 +12,11 @@
 
 #include <fstream>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace prob_livo {
@@ -96,6 +98,13 @@ class ProbLioBackend {
 
   ProbLioBackend(StatesGroup &state, const Options &options);
   ~ProbLioBackend();
+
+  using GeometryParentEvictionCallback =
+      std::function<void(const Eigen::Vector3i &)>;
+  void SetGeometryParentEvictionCallback(
+      GeometryParentEvictionCallback callback) {
+    map_->SetParentEvictionCallback(std::move(callback));
+  }
 
   bool ProcessEpoch(
       LidarMeasureGroup &measures,

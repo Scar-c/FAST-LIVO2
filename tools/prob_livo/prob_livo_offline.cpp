@@ -49,8 +49,7 @@ void ConfigureRuntime(const std::string &output_directory,
                       const std::string &camera_mode,
                       const std::string &visual_gate,
                       const std::string &bucket_policy,
-                      const std::string &visual_memory_stage,
-                      int visual_parent_lru_capacity) {
+                      const std::string &visual_memory_stage) {
   const bool camera_on = camera_mode != "off";
   const bool visual_on = camera_mode == "h1" || camera_mode == "h2";
   ros::param::set("/common/img_en", camera_on ? 1 : 0);
@@ -61,8 +60,6 @@ void ConfigureRuntime(const std::string &output_directory,
   ros::param::set("/common/prob_livo_bucket_policy", bucket_policy);
   ros::param::set("/common/prob_livo_visual_memory_stage",
                   visual_memory_stage);
-  ros::param::set("/common/prob_livo_visual_parent_lru_capacity",
-                  visual_parent_lru_capacity);
   ros::param::set("/prob_livo/visual_plane_gate", visual_gate);
   ros::param::set("/common/prob_livo_trajectory_path",
                   output_directory + "/trajectory.tum");
@@ -91,8 +88,6 @@ int main(int argc, char **argv) {
       "PROB_LIVO_BUCKET_POLICY", "native_blind_carry");
   const std::string visual_memory_stage = Environment(
       "PROB_LIVO_VISUAL_MEMORY_STAGE", "current");
-  const int visual_parent_lru_capacity = PositiveEnvironment(
-      "PROB_LIVO_VISUAL_PARENT_LRU_CAPACITY", 1000000);
   const std::size_t camera_stride =
       PositiveSizeEnvironment("PROB_LIVO_CAMERA_STRIDE", 1);
   if (!IsCameraMode(camera_mode) ||
@@ -101,7 +96,7 @@ int main(int argc, char **argv) {
        bucket_policy != "strict_reclass") ||
       (visual_memory_stage != "current" &&
        visual_memory_stage != "leak_fix" &&
-       visual_memory_stage != "parent_lru")) {
+       visual_memory_stage != "parent_owned")) {
     std::cerr << "invalid PROB_LIVO_CAMERA_MODE or "
                  "PROB_LIVO_VISUAL_PLANE_GATE\n";
     return 2;
@@ -117,8 +112,7 @@ int main(int argc, char **argv) {
     return 2;
   }
   ConfigureRuntime(output_directory, input_semantics, camera_mode,
-                   visual_gate, bucket_policy, visual_memory_stage,
-                   visual_parent_lru_capacity);
+                   visual_gate, bucket_policy, visual_memory_stage);
   setenv("PROB_LIVO_BUCKET_TRACE_PATH",
          (output_directory + "/livo_bucket_trace.csv").c_str(), 1);
 
@@ -215,7 +209,10 @@ int main(int argc, char **argv) {
          << "image_stride: " << camera_stride << "\n"
          << "bucket_policy: " << bucket_policy << "\n"
          << "visual_memory_stage: " << visual_memory_stage << "\n"
-         << "visual_parent_lru_capacity: " << visual_parent_lru_capacity
+         << "visual_lifetime_authority: "
+         << (visual_memory_stage == "parent_owned"
+                 ? "super_geometry_parent_eviction"
+                 : "legacy_stage")
          << "\n"
          << "other_messages: " << accounting.other_messages << "\n"
          << "first_bag_time: " << accounting.first_bag_time << "\n"
