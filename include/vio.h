@@ -15,6 +15,7 @@ which is included as part of this source code package.
 
 #include "voxel_map.h"
 #include "feature.h"
+#include "visual_memory.h"
 #include "prob_livo/visual_plane_gate.h"
 #include <opencv2/imgproc/imgproc_c.h>
 #include <pcl/filters/voxel_grid.h>
@@ -67,21 +68,6 @@ public:
   int search_level;
   Warp(int level, Matrix2d warp_matrix) : search_level(level), A_cur_ref(warp_matrix) {}
   ~Warp() {}
-};
-
-class VOXEL_POINTS
-{
-public:
-  std::vector<VisualPoint *> voxel_points;
-  int count;
-  VOXEL_POINTS(int num) : count(num) {}
-  ~VOXEL_POINTS() 
-  { 
-    for (VisualPoint* vp : voxel_points) 
-    {
-      if (vp != nullptr) { delete vp; vp = nullptr; }
-    }
-  }
 };
 
 struct VisualPlaneQueryResult
@@ -165,6 +151,8 @@ public:
 
   ofstream fout_camera, fout_colmap;
   unordered_map<VOXEL_LOCATION, VOXEL_POINTS *> feat_map;
+  VisualParentRegistry visual_parent_registry_;
+  VisualMemoryStage visual_memory_stage_ = VisualMemoryStage::kCurrent;
   unordered_map<VOXEL_LOCATION, int> sub_feat_map; 
   unordered_map<int, Warp *> warp_map;
   vector<VisualPoint *> retrieve_voxel_points;
@@ -172,6 +160,9 @@ public:
   FramePtr new_frame_;
   cv::Mat img_cp, img_rgb, img_test;
   VisualRuntimeCounters visual_counters_;
+  std::string visual_lifecycle_path_;
+  std::ofstream visual_lifecycle_output_;
+  std::size_t visual_parent_lru_capacity_ = 1000000;
   const VisualPlaneQuery *active_visual_plane_query_ = nullptr;
   prob_livo::VisualPlaneGateMode active_visual_gate_mode_ =
       prob_livo::VisualPlaneGateMode::kSuperLegacy;
@@ -185,6 +176,7 @@ public:
 
   VIOManager();
   ~VIOManager();
+  void setVisualLifecycleOutputPath(const std::string &path);
   void updateStateInverse(cv::Mat img, int level);
   void updateState(cv::Mat img, int level);
   void processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unordered_map<VOXEL_LOCATION, VoxelOctoTree *> &feat_map, double img_time);
@@ -235,6 +227,8 @@ public:
   {
     return visual_counters_;
   }
+
+  VisualMemorySnapshot visual_memory_snapshot() const;
   
   // void resetRvizDisplay();
   // deque<VisualPoint *> map_cur_frame;

@@ -133,6 +133,7 @@ add_library(vio
   src/vio.cpp
   src/frame.cpp
   src/visual_point.cpp
+  src/visual_memory.cpp
   src/prob_livo/visual_plane_gate.cpp
 )
 add_library(lio src/voxel_map.cpp)
@@ -341,6 +342,26 @@ target_include_directories(prob_livo_i6_visual_gate_tests PRIVATE
   tests/prob_livo
 )
 target_link_libraries(prob_livo_i6_visual_gate_tests
+  vio
+  lio
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+  ${Sophus_LIBRARIES}
+  ${Boost_LIBRARIES}
+  ${OpenMP_CXX_FLAGS}
+)
+
+# Prompt20 visual patch ownership and parent-LRU lifecycle tests.  The source
+# contract assertion is deliberately red against the current V0 update path so
+# the leak fix cannot be accepted without exercising the intended seam.
+add_executable(prob_livo_i7_visual_memory_tests
+  tests/prob_livo/test_i7_visual_memory.cpp
+)
+target_compile_definitions(prob_livo_i7_visual_memory_tests PRIVATE
+  FAST_LIVO_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)
+target_link_libraries(prob_livo_i7_visual_memory_tests
   vio
   lio
   ${catkin_LIBRARIES}

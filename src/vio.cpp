@@ -12,7 +12,49 @@ which is included as part of this source code package.
 
 #include "vio.h"
 
+#include <cstdlib>
+#include <fstream>
+#include <stdexcept>
+
+namespace {
+
+float *AllocateLegacyVisualPatch(std::size_t value_count)
+{
+  return new float[value_count];
+}
+
+bool ParseVisualMemoryStage(const std::string &name,
+                            VisualMemoryStage &stage)
+{
+  if (name == "current") {
+    stage = VisualMemoryStage::kCurrent;
+    return true;
+  }
+  if (name == "leak_fix") {
+    stage = VisualMemoryStage::kLeakFix;
+    return true;
+  }
+  if (name == "parent_lru") {
+    stage = VisualMemoryStage::kParentLru;
+    return true;
+  }
+  return false;
+}
+
+const char *VisualMemoryStageName(VisualMemoryStage stage)
+{
+  switch (stage) {
+    case VisualMemoryStage::kCurrent: return "current";
+    case VisualMemoryStage::kLeakFix: return "leak_fix";
+    case VisualMemoryStage::kParentLru: return "parent_lru";
+  }
+  return "unknown";
+}
+
+}  // namespace
+
 VIOManager::VIOManager()
+    : visual_parent_registry_(1000000)
 {
   // downSizeFilter.setLeafSize(0.2, 0.2, 0.2);
 }
@@ -22,8 +64,53 @@ VIOManager::~VIOManager()
   delete visual_submap;
   for (auto& pair : warp_map) delete pair.second;
   warp_map.clear();
-  for (auto& pair : feat_map) delete pair.second;
-  feat_map.clear();
+  if (visual_memory_stage_ == VisualMemoryStage::kParentLru) {
+    visual_parent_registry_.clear(
+        [this](const VOXEL_LOCATION &key) { feat_map.erase(key); });
+    feat_map.clear();
+  } else {
+    for (auto &pair : feat_map) delete pair.second;
+    feat_map.clear();
+  }
+  if (visual_lifecycle_output_.is_open()) visual_lifecycle_output_.close();
+}
+
+void VIOManager::setVisualLifecycleOutputPath(const std::string &path)
+{
+  visual_lifecycle_path_ = path;
+  if (visual_lifecycle_output_.is_open()) visual_lifecycle_output_.close();
+  if (visual_lifecycle_path_.empty()) return;
+  visual_lifecycle_output_.open(visual_lifecycle_path_,
+                                std::ios::out | std::ios::trunc);
+  if (visual_lifecycle_output_.is_open()) {
+    visual_lifecycle_output_
+        << "visual_process_call,stage,parent_hosts,visual_points,features,"
+           "observations,patch_bytes,vp_parent_max,feature_parent_max,"
+           "patch_parent_max,lru_capacity\n";
+  }
+}
+
+VisualMemorySnapshot VIOManager::visual_memory_snapshot() const
+{
+  if (visual_memory_stage_ == VisualMemoryStage::kParentLru)
+    return visual_parent_registry_.snapshot();
+  return SnapshotVisualIndex(feat_map);
+}
+
+void RecordVisualLifecycleSample(std::ofstream &output,
+                                 VisualMemoryStage stage,
+                                 std::size_t process_call,
+                                 std::size_t lru_capacity,
+                                 const VisualMemorySnapshot &snapshot)
+{
+  if (!output.is_open()) return;
+  output << process_call << ',' << VisualMemoryStageName(stage) << ','
+         << snapshot.parent_hosts << ',' << snapshot.visual_points << ','
+         << snapshot.features << ',' << snapshot.observations << ','
+         << snapshot.patch_bytes << ',' << snapshot.vp_parent_max << ','
+         << snapshot.feature_parent_max << ',' << snapshot.patch_parent_max
+         << ',' << lru_capacity << '\n';
+  output.flush();
 }
 
 void VIOManager::setImuToLidarExtrinsic(const V3D &transl, const M3D &rot)
@@ -40,6 +127,24 @@ void VIOManager::setLidarToCameraExtrinsic(vector<double> &R, vector<double> &P)
 
 void VIOManager::initializeVIO()
 {
+  std::string visual_memory_stage_name;
+  ros::param::param<std::string>("common/prob_livo_visual_memory_stage",
+                                 visual_memory_stage_name, "current");
+  if (!ParseVisualMemoryStage(visual_memory_stage_name,
+                              visual_memory_stage_)) {
+    throw std::runtime_error(
+        "unknown common/prob_livo_visual_memory_stage: " +
+        visual_memory_stage_name);
+  }
+  int visual_parent_lru_capacity = 1000000;
+  ros::param::param<int>("common/prob_livo_visual_parent_lru_capacity",
+                         visual_parent_lru_capacity, 1000000);
+  if (visual_parent_lru_capacity <= 0)
+    throw std::runtime_error("invalid visual parent LRU capacity");
+  visual_parent_lru_capacity_ =
+      static_cast<std::size_t>(visual_parent_lru_capacity);
+  visual_parent_registry_.setCapacity(visual_parent_lru_capacity_);
+
   visual_submap = new SubSparseMap;
 
   fx = cam->fx();
@@ -236,7 +341,15 @@ void VIOManager::insertPointIntoVoxelMap(VisualPoint *pt_new)
   }
   VOXEL_LOCATION position((int64_t)loc_xyz[0], (int64_t)loc_xyz[1], (int64_t)loc_xyz[2]);
   auto iter = feat_map.find(position);
-  if (iter != feat_map.end())
+  if (visual_memory_stage_ == VisualMemoryStage::kParentLru)
+  {
+    const uint8_t local_index = VisualParentLocalIndex(position, pt_w);
+    VisualParentHost *host =
+        visual_parent_registry_.getOrCreateForInsert(position);
+    if (iter == feat_map.end()) feat_map[position] = host;
+    host->add(pt_new, local_index);
+  }
+  else if (iter != feat_map.end())
   {
     iter->second->voxel_points.push_back(pt_new);
     iter->second->count++;
@@ -244,7 +357,7 @@ void VIOManager::insertPointIntoVoxelMap(VisualPoint *pt_new)
   else
   {
     VOXEL_POINTS *ot = new VOXEL_POINTS(0);
-    ot->voxel_points.push_back(pt_new);
+    ot->add(pt_new, VisualParentLocalIndex(position, pt_w));
     feat_map[position] = ot;
   }
 }
@@ -898,13 +1011,15 @@ void VIOManager::generateVisualMapPoints(cv::Mat img, vector<pointWithVar> &pg)
       // if(std::fabs(cos_theta)<0.34) continue; // 70 degree
       V2D pc(new_frame_->w2c(pt));
 
-      float *patch = new float[patch_size_total];
-      getImagePatch(img, pc, patch, 0);
+      std::unique_ptr<VisualPatch> patch =
+          VisualPatch::Allocate(patch_size_total);
+      getImagePatch(img, pc, patch->data(), 0);
 
       VisualPoint *pt_new = new VisualPoint(pt);
 
       Vector3d f = cam->cam2world(pc);
-      Feature *ftr_new = new Feature(pt_new, patch, pc, f, new_frame_->T_f_w_, 0);
+      Feature *ftr_new = new Feature(pt_new, std::move(patch), pc, f,
+                                     new_frame_->T_f_w_, 0);
       ftr_new->img_ = img;
       ftr_new->id_ = new_frame_->id_;
       ftr_new->inv_expo_time_ = state->inv_expo_time;
@@ -962,7 +1077,16 @@ void VIOManager::updateVisualMapPoints(cv::Mat img)
     V2D pc(new_frame_->w2c(pt->pos_));
     bool add_flag = false;
     
-    float *patch_temp = new float[patch_size_total];
+    std::unique_ptr<VisualPatch> patch_owner;
+    float *patch_temp = nullptr;
+    if (visual_memory_stage_ == VisualMemoryStage::kCurrent) {
+      // V0 intentionally retains the historical rejected-candidate leak so
+      // the Prompt20 attribution run has a faithful control path.
+      patch_temp = AllocateLegacyVisualPatch(patch_size_total);
+    } else {
+      patch_owner = VisualPatch::Allocate(patch_size_total);
+      patch_temp = patch_owner->data();
+    }
     getImagePatch(img, pc, patch_temp, 0);
     // TODO: condition: distance and view_angle
     // Step 1: time
@@ -994,7 +1118,15 @@ void VIOManager::updateVisualMapPoints(cv::Mat img)
       update_num += 1;
       update_flag[i] = 1;
       Vector3d f = cam->cam2world(pc);
-      Feature *ftr_new = new Feature(pt, patch_temp, pc, f, new_frame_->T_f_w_, visual_submap->search_levels[i]);
+      Feature *ftr_new = nullptr;
+      if (visual_memory_stage_ == VisualMemoryStage::kCurrent) {
+        ftr_new = new Feature(pt, patch_temp, pc, f, new_frame_->T_f_w_,
+                              visual_submap->search_levels[i]);
+      } else {
+        ftr_new = new Feature(pt, std::move(patch_owner), pc, f,
+                              new_frame_->T_f_w_,
+                              visual_submap->search_levels[i]);
+      }
       ftr_new->img_ = img;
       ftr_new->id_ = new_frame_->id_;
       ftr_new->inv_expo_time_ = state->inv_expo_time;
@@ -1958,6 +2090,19 @@ void VIOManager::processFrame(cv::Mat &img, vector<pointWithVar> &pg, const unor
   double t7 = omp_get_wtime();
   
   if(colmap_output_en)  dumpDataForColmap();
+
+  // visual_submap is a borrowed per-frame view.  Evict only after every use
+  // in this frame has completed, and reset the borrowed view before deleting
+  // parent-owned VisualPoints.
+  if (visual_memory_stage_ == VisualMemoryStage::kParentLru) {
+    visual_submap->reset();
+    visual_parent_registry_.evictToCapacity(
+        [this](const VOXEL_LOCATION &key) { this->feat_map.erase(key); });
+  }
+  RecordVisualLifecycleSample(visual_lifecycle_output_, visual_memory_stage_,
+                              visual_counters_.visual_process_calls,
+                              visual_parent_lru_capacity_,
+                              visual_memory_snapshot());
 
   frame_count++;
   ave_total = ave_total * (frame_count - 1) / frame_count + (t7 - t1 - (t5 - t4)) / frame_count;

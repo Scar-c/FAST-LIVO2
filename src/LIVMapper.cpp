@@ -412,6 +412,10 @@ void LIVMapper::initializeComponents()
     vio_manager->exposure_estimate_en = exposure_estimate_en;
     vio_manager->colmap_output_en = colmap_output_en;
     vio_manager->initializeVIO();
+    if (!prob_livo_trajectory_path_.empty()) {
+      vio_manager->setVisualLifecycleOutputPath(
+          prob_livo_trajectory_path_ + ".visual_lifecycle.csv");
+    }
   }
 
   p_imu->set_extrinsic(extT, extR);
