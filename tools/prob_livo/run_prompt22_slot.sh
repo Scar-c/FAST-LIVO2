@@ -21,6 +21,7 @@ NATIVE_DEVEL="${PROMPT22_NATIVE_DEVEL:-/home/lc/super_livo/devel_native}"
 RUN_ROOT="${PROMPT22_RUN_ROOT:-$REPO_ROOT/results/prob_livo/prompt22/$PHASE}"
 CPUSET="${PROMPT22_CPUSET:-0,2,4,6}"
 TIMEOUT_SECONDS="${PROMPT22_TIMEOUT_SECONDS:-1800}"
+RUN_TAG="${PROMPT22_RUN_TAG:-}"
 
 case "$DATASET" in
   NTU)
@@ -84,6 +85,13 @@ if [[ ! "$SEQUENCE" =~ ^[A-Za-z0-9_.-]+$ || ! "$ARM" =~ ^[A-Za-z0-9_.-]+$ ]]; th
 fi
 
 RUN_ID="P22-${SEQUENCE}-${ARM}-r${REP}"
+if [[ -n "$RUN_TAG" ]]; then
+  if [[ ! "$RUN_TAG" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    echo "ERR: invalid run tag" >&2
+    exit 2
+  fi
+  RUN_ID="${RUN_ID}-${RUN_TAG}"
+fi
 RUN_DIR="$RUN_ROOT/$RUN_ID"
 if [[ -e "$RUN_DIR" ]]; then
   echo "ERR: refusing to overwrite $RUN_DIR" >&2
