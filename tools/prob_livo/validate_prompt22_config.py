@@ -173,12 +173,18 @@ def validate_pair(
     native: Path,
     prob: Path,
     profile: Path,
+    camera_profile: Path | None,
     include_camera: bool,
     mode: str,
 ) -> tuple[str, dict[str, Any]]:
     native_normalized = normalize(load(native / "effective_rosparams.yaml"), include_camera)
     prob_normalized = normalize(load(prob / "effective_rosparams.yaml"), include_camera)
-    profile_normalized = normalize(load(profile), include_camera)
+    profile_root = load(profile)
+    if include_camera:
+        if camera_profile is None:
+            raise ValueError("camera profile is required for LIVO identity validation")
+        profile_root["laserMapping"] = load(camera_profile)
+    profile_normalized = normalize(profile_root, include_camera)
     native_sha = digest(native_normalized)
     prob_sha = digest(prob_normalized)
     write_artifacts(native, native_normalized, native_sha)
@@ -221,6 +227,7 @@ def main() -> int:
     parser.add_argument("--native", type=Path)
     parser.add_argument("--prob", type=Path)
     parser.add_argument("--profile", type=Path)
+    parser.add_argument("--camera-profile", type=Path)
     parser.add_argument("--mode", choices=["lio", "livo"])
     parser.add_argument("--mutation-test", action="store_true")
     args = parser.parse_args()
@@ -234,7 +241,12 @@ def main() -> int:
         mutation_test(args.native, args.prob, args.mode == "livo")
         return 0
     sha, normalized = validate_pair(
-        args.native, args.prob, args.profile, args.mode == "livo", args.mode
+        args.native,
+        args.prob,
+        args.profile,
+        args.camera_profile,
+        args.mode == "livo",
+        args.mode,
     )
     print(f"PROMPT22 shared semantic identity: PASS sha256={sha} keys={len(normalized)}")
     return 0
