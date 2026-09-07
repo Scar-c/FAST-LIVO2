@@ -15,6 +15,7 @@ P10 / I6  dead-code hygiene + native-LIO/Prob-LIO memory characterization
 I7       downsample ablation cancelled; Super VoxelGridClosest frozen
 I8       generalization
 P21 / I8  visual lifetime authority + NTU/Oxford matrix closure
+P22 / I8  final controlled NTU/Oxford matrix and shared-config correction
 ```
 
 Prompt 4 / I3 is the Super-input parity corrective for `eee_01`; it does not
@@ -91,3 +92,11 @@ accepted cell-level audit is in `spec/prob_livo/PROMPT21_FINAL_MATRIX.csv`.
 
 This repository has no top-level `prompts/README.md`; this
 `prompts/prob_livo/README.md` is the maintained prompt index.
+
+The exact Prompt22 source is registered at
+`prompts/prob_livo/prompt22_final_controlled_matrix.md` (source SHA256
+`405eebf6be05d951f67975d8fef80b68727ccadf192fd9c6c5812ef0686de1d8`).
+Prompt22 corrects the final Oxford Native/Prob shared configuration, audits
+and reuses the official-config NTU matrix, and publishes the final accuracy,
+compute, memory, identity-gate, and historical crosswalk artifacts in
+`spec/prob_livo/PROMPT22_EVIDENCE.md` and its companion CSV files.
