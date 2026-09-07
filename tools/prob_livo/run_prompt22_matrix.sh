@@ -10,6 +10,7 @@ PROFILE="$REPO_ROOT/config/prob_livo/OXFORD_OSD_FINAL_SHARED.yaml"
 CAMERA_PROFILE="$REPO_ROOT/config/camera_OXFORD_SPIRES.yaml"
 SLOT_RUNNER="$REPO_ROOT/tools/prob_livo/run_prompt22_slot.sh"
 PAIR_GATE="$REPO_ROOT/tools/prob_livo/validate_prompt22_pair.sh"
+RUN_TAG="${PROMPT22_RUN_TAG:-}"
 
 if [[ -n "$(git -C "$REPO_ROOT" status --short)" ]]; then
   echo "ERR: Prompt22 matrix requires a clean Prob worktree" >&2
@@ -25,8 +26,10 @@ gate_pair() {
     *) return 0 ;;
   esac
   local root="${PROMPT22_RUN_ROOT:-$REPO_ROOT/results/prob_livo/prompt22/formal}"
-  local native_dir="$root/P22-${seq}-${native_arm}-r${rep}"
-  local prob_dir="$root/P22-${seq}-${prob_arm}-r${rep}"
+  local suffix=""
+  [[ -n "$RUN_TAG" ]] && suffix="-$RUN_TAG"
+  local native_dir="$root/P22-${seq}-${native_arm}-r${rep}${suffix}"
+  local prob_dir="$root/P22-${seq}-${prob_arm}-r${rep}${suffix}"
   if [[ ! -d "$native_dir" || ! -d "$prob_dir" ]]; then
     echo "ERR: pair directories missing for $seq rep $rep" >&2
     return 1
@@ -34,16 +37,18 @@ gate_pair() {
   bash "$PAIR_GATE" "$native_dir" "$prob_dir" "$mode" "$PROFILE" "$CAMERA_PROFILE"
 }
 
-tail -n +2 "$ORDER_FILE" | while IFS=, read -r order dataset sequence arm rep phase workers cpuset status; do
+while IFS=, read -r order dataset sequence arm rep phase workers cpuset status; do
   [[ -z "$order" ]] && continue
   echo "[Prompt22] order=$order $dataset $sequence $arm r$rep"
-  PROMPT22_CPUSET="$cpuset" PROMPT22_RUN_ROOT="${PROMPT22_RUN_ROOT:-$REPO_ROOT/results/prob_livo/prompt22/formal}" \
+  taskset_cpuset="${cpuset//+/,}"
+  PROMPT22_CPUSET="$taskset_cpuset" PROMPT22_RUN_TAG="$RUN_TAG" \
+    PROMPT22_RUN_ROOT="${PROMPT22_RUN_ROOT:-$REPO_ROOT/results/prob_livo/prompt22/formal}" \
     bash "$SLOT_RUNNER" "$dataset" "$sequence" "$arm" "$rep" "$phase" || exit 1
   case "$arm" in
     N-LIO|N-LIVO-STRIDE)
       gate_pair "$sequence" "$arm" "$rep" || exit 1
       ;;
   esac
-done
+done < <(tail -n +2 "$ORDER_FILE")
 
 echo "PROMPT22 Oxford formal matrix execution and pair admission complete"
