@@ -1,0 +1,70 @@
+semantic_key,classification,ntu_final,oxford_final,native_source,prob_source,authority_or_default,rationale
+common/lid_topic,SHARED_EXACT,/os1_cloud_node1/points,/hesai/pandar,LIVMapper::readParameters common/lid_topic,LIVMapper::readParameters common/lid_topic,NTU official 0d2c034; Oxford OSD f2c9abb,Same sensor topic in both backends
+common/imu_topic,SHARED_EXACT,/imu/imu,/alphasense_driver_ros/imu,LIVMapper::readParameters common/imu_topic,LIVMapper::readParameters common/imu_topic,Dataset authority,Same sensor topic in both backends
+common/img_topic,SHARED_EXACT,/left/image_raw,/alphasense_driver_ros/cam0/debayered/image/compressed,LIVMapper::readParameters common/img_topic,LIVMapper::readParameters common/img_topic,Local bag transport adaptation for Oxford,Same decoded image stream in both backends
+common/img_en,SHARED_EXACT,1,1,LIVMapper::readParameters common/img_en,LIVMapper::readParameters common/img_en,Source OSD image_en normalized to current code img_en,Same enable semantics
+common/lidar_en,SHARED_EXACT,1,1,LIVMapper::readParameters common/lidar_en,LIVMapper::readParameters common/lidar_en,Dataset profile,Same enable semantics
+common/ros_driver_bug_fix,SHARED_EXACT,false,false,LIVMapper::readParameters common/ros_driver_bug_fix,LIVMapper::readParameters common/ros_driver_bug_fix,Dataset profile,Same driver behavior
+extrin_calib/extrinsic_T,SHARED_EXACT,"[-0.05,0.0,0.055]","[-0.00298737408,-0.0162174455,0.0837937008]",LIVMapper extrinsic params,LIVMapper extrinsic params,Dataset authority,Same LiDAR-IMU extrinsic semantics
+extrin_calib/extrinsic_R,SHARED_EXACT,"[1,0,0,0,1,0,0,0,1]","[-0.0179010935,-0.9998395,0.000724771588,0.999839311,-0.0179003915,0.000963774848,-0.000950646466,0.000741907749,0.999999273]",LIVMapper extrinsic params,LIVMapper extrinsic params,Dataset authority,Same LiDAR-IMU extrinsic semantics
+extrin_calib/Rcl,SHARED_EXACT,"[0.0218308,0.99976,-0.00201407,-0.0131205,0.00230088,0.999911,0.999676,-0.0218025,0.0131676]","[0.009769443369467168,0.9999460020163569,0.0035427429705001123,0.007671197638838445,0.003467861351881818,-0.9999645627043141,-0.9999228523756403,0.009796274248324188,-0.007636904334543504]",LIVMapper camera extrinsic params,LIVMapper camera extrinsic params,Dataset authority,Same camera extrinsic semantics
+extrin_calib/Pcl,SHARED_EXACT,"[0.122993,0.0398643,-0.0577101]","[0.00035060884033447846,-0.079574053851818,-0.053826061545697405]",LIVMapper camera extrinsic params,LIVMapper camera extrinsic params,Dataset authority,Same camera extrinsic semantics
+time_offset/lidar_time_offset,SHARED_EXACT,-0.1,0.0,LIVMapper::readParameters time_offset,LIVMapper::readParameters time_offset,NTU explicit; Oxford source default 0,Same timing semantics
+time_offset/imu_time_offset,SHARED_EXACT,0.0,0.0,LIVMapper::readParameters time_offset,LIVMapper::readParameters time_offset,Dataset/default,Same timing semantics
+time_offset/img_time_offset,SHARED_EXACT,0.0,0.0,LIVMapper::readParameters time_offset,LIVMapper::readParameters time_offset,Dataset/default,Same timing semantics
+time_offset/exposure_time_init,SHARED_EXACT,0.0,0.0,LIVMapper::readParameters time_offset,LIVMapper::readParameters time_offset,Dataset/default,Same timing semantics
+preprocess/lidar_type,SHARED_EXACT,3,5,LIVMapper preprocess,LIVMapper preprocess,Dataset authority,Same LiDAR type semantic
+preprocess/scan_line,SHARED_EXACT,16,64,LIVMapper preprocess,LIVMapper preprocess,Dataset authority,Same scan-line semantic
+preprocess/timestamp_unit,SHARED_EXACT,absent,3,LIVMapper preprocess,LIVMapper preprocess,Oxford OSD explicit; NTU transport provides native ROS stamp,Same timestamp interpretation
+preprocess/blind,SHARED_EXACT,1.0,1.0,LIVMapper preprocess,LIVMapper preprocess,Dataset authority,Same blind range semantic
+preprocess/point_filter_num,SHARED_EXACT,3,1,LIVMapper preprocess,LIVMapper preprocess,Dataset authority,Same point filter semantic
+preprocess/filter_size_surf,SHARED_EXACT,0.1,0.5,LIVMapper preprocess,LIVMapper preprocess,NTU authority explicit; Oxford OSD LIVMapper default 0.5,Same downsample semantic
+preprocess/feature_extract_enabled,SHARED_EXACT,absent,false,LIVMapper preprocess,LIVMapper preprocess,Source default false,Inactive legacy feature extractor
+preprocess/hilti_en,SHARED_EXACT,absent,false,LIVMapper preprocess,LIVMapper preprocess,Source default false,Inactive dataset-specific path
+imu/imu_en,SHARED_EXACT,true,true,LIVMapper imu params,LIVMapper imu params,Dataset authority/default,Same IMU enable semantic
+imu/imu_int_frame,SHARED_EXACT,30,1,LIVMapper imu params,LIVMapper imu params,Dataset authority,Same initialization window semantic
+imu/acc_cov,SHARED_EXACT,0.5,0.1,LIVMapper imu params,LIVMapper imu params,Dataset authority,Same covariance semantic
+imu/gyr_cov,SHARED_EXACT,0.3,0.1,LIVMapper imu params,LIVMapper imu params,Dataset authority,Same covariance semantic
+imu/b_acc_cov,SHARED_EXACT,0.0001,0.0001,LIVMapper imu params,LIVMapper imu params,Dataset authority,Same covariance semantic
+imu/b_gyr_cov,SHARED_EXACT,0.0001,0.0001,LIVMapper imu params,LIVMapper imu params,Dataset authority,Same covariance semantic
+vio/max_iterations,SHARED_EXACT,5,5,LIVMapper VIO params,LIVMapper VIO params,Dataset authority/default,Same visual iteration semantic when active
+vio/outlier_threshold,SHARED_EXACT,1000,78,LIVMapper VIO params,LIVMapper VIO params,Dataset authority,Same visual outlier semantic
+vio/img_point_cov,SHARED_EXACT,100,100,LIVMapper VIO params,LIVMapper VIO params,Dataset authority,Same visual covariance semantic
+vio/patch_size,SHARED_EXACT,8,8,LIVMapper VIO params,LIVMapper VIO params,Dataset authority,Same patch semantic when active
+vio/patch_pyrimid_level,SHARED_EXACT,3,4,LIVMapper VIO params,LIVMapper VIO params,Dataset authority,Same pyramid semantic when active
+vio/normal_en,SHARED_EXACT,true,true,LIVMapper VIO params,LIVMapper VIO params,Dataset authority,Same normal semantic when active
+vio/raycast_en,SHARED_EXACT,false,false,LIVMapper VIO params,LIVMapper VIO params,Dataset authority,Same raycast semantic when active
+vio/inverse_composition_en,SHARED_EXACT,false,false,LIVMapper VIO params,LIVMapper VIO params,Dataset authority,Same inverse-composition semantic when active
+vio/exposure_estimate_en,SHARED_EXACT,true,true,LIVMapper VIO params,LIVMapper VIO params,Dataset authority,Same exposure semantic when active
+vio/inv_expo_cov,SHARED_EXACT,0.1,0.1,LIVMapper VIO params,LIVMapper VIO params,Dataset authority,Same exposure covariance semantic when active
+lio/max_iterations,SHARED_EXACT,5,5,voxel_map loadVoxelConfig,ProbLioBackend options,Dataset authority/default,Same LIO iteration semantic
+lio/dept_err,SHARED_EXACT,0.02,0.05,voxel_map loadVoxelConfig,ProbLioBackend options,NTU authority; Oxford OSD default 0.05,Same depth error semantic
+lio/beam_err,SHARED_EXACT,0.01,0.02,voxel_map loadVoxelConfig,ProbLioBackend options,NTU authority; Oxford OSD default 0.02,Same beam error semantic
+lio/min_eigen_value,SHARED_EXACT,0.0025,0.01,voxel_map loadVoxelConfig,ProbLioBackend plane gate,NTU authority; Oxford OSD default 0.01,Same eigen threshold semantic
+lio/voxel_size,SHARED_EXACT,0.5,0.5,voxel_map loadVoxelConfig,ProbLioBackend options,Dataset authority/default,Same coarse voxel semantic
+lio/max_layer,SHARED_EXACT,2,1,voxel_map loadVoxelConfig,ProbLioBackend options,Dataset authority/default,Same hierarchy depth semantic
+lio/max_points_num,SHARED_EXACT,50,50,voxel_map loadVoxelConfig,ProbLioBackend options,Dataset authority/default,Same point cap semantic
+lio/layer_init_num,SHARED_EXACT,"[5,5,5,5,5]","[5,5,5,5,5]",voxel_map loadVoxelConfig,ProbLioBackend options,Dataset authority/default,Same hierarchy initialization semantic
+local_map/map_sliding_en,SHARED_EXACT,false,false,voxel_map loadVoxelConfig,ProbLioBackend map policy,Dataset authority/default,Same local-map policy
+local_map/half_map_size,SHARED_EXACT,100,100,voxel_map loadVoxelConfig,ProbLioBackend map policy,Dataset authority/default,Same local-map extent
+local_map/sliding_thresh,SHARED_EXACT,8,8,voxel_map loadVoxelConfig,ProbLioBackend map policy,Dataset authority/default,Same local-map threshold
+uav/imu_rate_odom,SHARED_EXACT,false,false,LIVMapper params,LIVMapper params,Dataset/default,Same propagation mode
+uav/gravity_align_en,SHARED_EXACT,false,false,LIVMapper params,LIVMapper params,Dataset/default,Same gravity mode
+publish/dense_map_en,MODE_INACTIVE,false,false,runner override,runner override,Prompt22 formal envelope,Disabled for both resource runs
+publish/pub_effect_point_en,MODE_INACTIVE,false,false,LIVMapper params,LIVMapper params,Dataset/default,Not an estimator input
+publish/pub_scan_num,MODE_INACTIVE,1,1,LIVMapper params,LIVMapper params,Dataset/default,Output-only
+publish/blind_rgb_points,MODE_INACTIVE,0.0,0.01,LIVMapper params,LIVMapper params,Dataset/default,Camera-color output inactive in controlled run
+pcd_save/pcd_save_en,MODE_INACTIVE,false,false,runner override,runner override,Prompt22 formal envelope,Disabled for both resource runs
+pcd_save/type,MODE_INACTIVE,0,0,LIVMapper params,LIVMapper params,Dataset/default,Output-only
+pcd_save/colmap_output_en,MODE_INACTIVE,false,false,runner override,runner override,Prompt22 formal envelope,Disabled for both resource runs
+pcd_save/filter_size_pcd,MODE_INACTIVE,0.15,0.5,LIVMapper params,LIVMapper params,Dataset/default,Output-only
+pcd_save/interval,MODE_INACTIVE,-1,-1,LIVMapper params,LIVMapper params,Dataset/default,Output-only
+image_save/img_save_en,MODE_INACTIVE,false,false,runner override,runner override,Prompt22 formal envelope,Disabled for both resource runs
+image_save/interval,MODE_INACTIVE,1,1,LIVMapper params,LIVMapper params,Dataset/default,Output-only
+camera/laserMapping,SHARED_EXACT,NTU_camera_NTU_VIRAL,Oxford_camera_OXFORD_SPIRES,FAST-LIVO2 project camera calibration,FAST-LIVO2 project camera calibration,Existing dataset calibration artifact,Same decoded camera content and calibration in paired arms
+camera_stride,SHARED_EXACT,1,"Church_05=1;College_03=2;Palace_01=2;Quarter_01=2",Prompt18/19 frozen policy,Prompt18/19 frozen policy,Prompt18/19,Same selected timestamp policy in each pair
+common/prob_livo_backend,BACKEND_INTRINSIC,false,true,Native/Prob runner mode,Prob runner mode,Current backend selection,No one-to-one backend identity exists
+prob_livo/map_resolution,BACKEND_INTRINSIC,absent,0.5,Native voxel map,Prob Super map,Prompt20/21 Prob map ownership,Prob Super parent representation has no Native control
+prob_livo/map_capacity,BACKEND_INTRINSIC,absent,100000000,Native voxel map,Prob Super map,Prompt20/21 Prob map ownership,Prob-only capacity
+prob_livo/visual_plane_gate,BACKEND_INTRINSIC,absent,livo2_prob_3sigma,Native visual plane path,Prob visual plane provider,Prompt9/21 Prob backend,No one-to-one Native gate
+common/prob_livo_bucket_policy,BACKEND_INTRINSIC,absent,native_blind_carry,Native scheduler,Prob scheduler adapter,Prompt17/19 canonical timing,Backend-owned policy label
