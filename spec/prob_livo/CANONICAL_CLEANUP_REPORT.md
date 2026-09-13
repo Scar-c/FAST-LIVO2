@@ -141,7 +141,11 @@ CN production: absent
 SA production: absent
 correct post-Prompt22 controls preserved: PASS
 canonical tests: PASS
-prob-livo local == remote: PENDING
-worktree clean: PENDING
-rejected experimental branches deleted: PENDING
+prob-livo local == remote: PASS (both 4343d4a before this final report commit)
+worktree clean: PASS after this report commit
+rejected experimental branches deleted: PASS (Prompt11 and Prompt29–38)
 ```
+
+The final report-only commit is pushed with a force-with-lease expectation of
+`4343d4aeea51e15551f9d13fba611f718e6728f5`; it changes no production source,
+configuration, test, or evidence data.
