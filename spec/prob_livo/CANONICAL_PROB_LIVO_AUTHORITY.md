@@ -16,6 +16,12 @@ runner. Prompt27's RGB registered-cloud publication is retained as a
 publication-only compatibility fix; it does not change estimator state,
 association, covariance, scheduling, or trajectory semantics.
 
+Prompt39 publishes a documentation-only, Prompt22-derived 4-way
+Native/Prob LIO/LIVO-STRIDE stride/resource matrix. It is an audit and
+comparison artifact, not a new production authority or estimator variant:
+`CANONICAL_4WAY_STRIDE_RESOURCE_MATRIX.md`, the companion CSV, and the
+provenance note identify the exact Prompt22 run rows and aggregation rules.
+
 ## Explicitly superseded work
 
 - Prompt23 is retained only as an Oxford/NTU stride ablation archive.
@@ -40,3 +46,9 @@ production search scope and are not executable dependencies.
 The canonical branch must remain buildable with `catkin_make -j4`, use the
 existing TBB-backed offline runner, and keep local `prob-livo` equal to
 `origin/prob-livo` after publication.
+
+The external `vikit_common` dependency is resolved from the clean local
+official source `/home/lc/design_ws/src/common/rpg_vikit` at
+`6c886c8e5d83997806e00294826d528cea3581dd`, remote
+`https://github.com/xuankuzcr/rpg_vikit.git`, after sourcing
+`/home/lc/design_ws/devel/setup.bash`.

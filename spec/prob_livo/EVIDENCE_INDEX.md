@@ -7,6 +7,12 @@ deterministic Super-native IMU/undistortion seam tests. Prompt 3 adds the
 camera-OFF Prob-LIO P0–P4 backend, required component gates, and one canonical
 whole-bag EEE01 baseline run.
 
+Prompt39 closes the canonical documentation audit with a Prompt22-derived
+four-way Native/Prob LIO/LIVO-STRIDE stride/resource matrix. See
+`CANONICAL_4WAY_STRIDE_RESOURCE_MATRIX.md`, its CSV, and
+`CANONICAL_4WAY_STRIDE_RESOURCE_PROVENANCE.md`; these are derived evidence
+only and do not alter the production estimator.
+
 ## Repository identity
 
 | Evidence | Value |

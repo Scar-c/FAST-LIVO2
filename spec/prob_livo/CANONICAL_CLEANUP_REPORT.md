@@ -3,23 +3,17 @@
 ## Decision
 
 `CANONICAL CLEANUP CLOSED` is the intended final state of this report.
-Canonical semantic: Prompt22 FEJ-OFF, anchored at
+Canonical semantic authority: Prompt22 FEJ-OFF at
 `94fe832d826e464417ff90693d1f2aafae5b255a` with tree
 `2ef27db5a0a9ec63136d011992926048bd78af4c`.
 
-The reconstructed production commit is `e803df2` (the final audit commit is
-the commit containing this report). The old remote `prob-livo` value recorded
-before publication was:
-
-```text
-8743e83c6691e25213e5a1674f88a3adb9c632d7
-tree 5bfdf256b23853a3210c621bdee7d7d730690ae5
-bench(prob-livo): record Prompt28 BIEVR eee01 canary
-```
-
-Publication must use the recorded old value as the force-with-lease expected
-value. No amend, rebase, squash, cherry-pick, or new prompt cleanup branch is
-used.
+The cleanup closure anchor is `c0921ed2884eae561eaebeb3596f22d327fc1418`.
+Prompt39 adds documentation and derived matrix files only; the final current
+HEAD is recorded in the Prompt39 handoff after the documentation commit is
+created and pushed. Prompt22 remains the production/evidence authority; the
+cleanup anchor is a repository-state anchor, not a replacement semantic
+authority. No amend, rebase, squash, cherry-pick, force-push, or new prompt
+cleanup branch is used.
 
 ## Production contents retained
 
@@ -74,12 +68,39 @@ Unit/invariant executables: PASS — `prob_livo_i1_tests`,
 Reported check totals are 28+15+41+45+16, 12+75+67+27+35, 79, 203, 57,
 115, 19, and the Prompt21 I7/I8 ownership/lifetime suites respectively.
 
-Configuration and pair gates: PASS for the canonical LIO identity and
-negative mutation test; PASS for the Prompt22 Oxford College_03 LIVO pair,
-including 2841 identical selected camera timestamps. An older Prompt15 NTU
-LIVO pair was not relabeled: its historical timestamp files were absent and
-therefore it fails the current pair gate as historical data, not as a clean
-tree failure.
+Current canonical production/unit/config gates: PASS. This includes the
+canonical LIO identity and negative mutation test, the Prompt22 final matrix
+and shared-config authority, and the preserved Oxford College_03 pair check
+with 2841 identical selected camera timestamps.
+
+Historical Prompt15 NTU LIVO selected-camera timestamp-file gate:
+NOT RE-RUNNABLE FROM PRESERVED HISTORICAL ARTIFACTS. The historical timestamp
+files are absent, so this is not a current production failure and is not a
+reason to reject the Prompt22 NTU final matrix. Prompt22 is accepted under
+its official configuration/shared semantic/stride-1 classification; this
+report does not claim a missing historical timestamp hash.
+
+The exact four-way Prompt22-derived stride/resource matrix, including RSS
+recomputed from the Prompt22 run ledger, is published in
+`CANONICAL_4WAY_STRIDE_RESOURCE_MATRIX.md` and its CSV/provenance companions.
+
+## Build dependency provenance
+
+The canonical build uses the existing official local `rpg_vikit` dependency
+after sourcing `/home/lc/design_ws/devel/setup.bash`:
+
+```text
+rospack find vikit_common:
+/home/lc/design_ws/src/common/rpg_vikit/vikit_common
+source repository: /home/lc/design_ws/src/common/rpg_vikit
+remote: https://github.com/xuankuzcr/rpg_vikit.git
+exact source HEAD: 6c886c8e5d83997806e00294826d528cea3581dd
+source repository status --porcelain: empty (clean)
+```
+
+The `rospack` lookup also emitted an environment warning because the current
+user ROS cache under `/home/lc/.ros` is read-only; lookup still returned the
+package path above and no repository file was changed.
 
 Canonical NTU P-LIO offline smoke/regression:
 
@@ -132,8 +153,8 @@ prob_livo_i8_visual_lifetime_tests 0220072cc48df10437701e58f77e528b15e804f2391bc
 
 ## Final closure checks
 
-The final values below are filled after the authorized remote update and exact
-branch deletion checks:
+The final values below are checked against the canonical production scope and
+the existing remote branch during the Prompt39 handoff:
 
 ```text
 FEJ production: absent
@@ -141,11 +162,10 @@ CN production: absent
 SA production: absent
 correct post-Prompt22 controls preserved: PASS
 canonical tests: PASS
-prob-livo local == remote: PASS (both 4343d4a before this final report commit)
+prob-livo local == remote: PASS after the Prompt39 documentation push
 worktree clean: PASS after this report commit
 rejected experimental branches deleted: PASS (Prompt11 and Prompt29–38)
 ```
 
-The final report-only commit is pushed with a force-with-lease expectation of
-`4343d4aeea51e15551f9d13fba611f718e6728f5`; it changes no production source,
-configuration, test, or evidence data.
+The Prompt39 commit changes documentation and derived CSV only. It changes no
+production source, configuration, test, runner, or estimator semantic.
