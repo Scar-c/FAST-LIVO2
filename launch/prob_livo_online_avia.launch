@@ -1,0 +1,43 @@
+<launch>
+  <!-- Canonical Prob-LIVO online runner with the FAST-LIVO2 visualization contract. -->
+  <arg name="config" />
+  <arg name="camera_config" />
+  <arg name="trajectory_output_path" />
+  <arg name="runtime_report_directory" />
+  <arg name="seq_name" default="canonical" />
+  <arg name="prob_backend" default="true" />
+  <arg name="prob_camera_vio" default="true" />
+  <arg name="rviz" default="true" />
+  <arg name="rviz_config" default="$(find fast_livo)/rviz_cfg/prompt27_fast_livo2.rviz" />
+
+  <rosparam command="load" file="$(arg config)" />
+  <rosparam file="$(arg camera_config)" ns="laserMapping" />
+
+  <param name="common/img_en" value="1" type="int" />
+  <param name="common/lidar_en" value="1" type="int" />
+  <param name="common/prob_livo_backend" value="$(arg prob_backend)" type="bool" />
+  <param name="common/prob_livo_camera_vio" value="$(arg prob_camera_vio)" type="bool" />
+  <param name="common/prob_livo_input_semantics" value="fast_native" type="str" />
+  <param name="common/prob_livo_bucket_policy" value="native_blind_carry" type="str" />
+  <param name="prob_livo/visual_plane_gate" value="livo2_prob_3sigma" type="str" />
+  <param name="evo/seq_name" value="$(arg seq_name)" type="str" />
+  <param name="evo/runtime_report_directory" value="$(arg runtime_report_directory)" type="str" />
+  <param name="common/prob_livo_trajectory_path" value="$(arg trajectory_output_path)" type="str" />
+  <param name="publish/dense_map_en" value="true" type="bool" />
+  <param name="publish/pub_effect_point_en" value="false" type="bool" />
+  <param name="publish/pub_plane_en" value="false" type="bool" />
+  <param name="pcd_save/pcd_save_en" value="false" type="bool" />
+  <param name="pcd_save/colmap_output_en" value="false" type="bool" />
+  <param name="image_save/img_save_en" value="false" type="bool" />
+
+  <node pkg="fast_livo" type="fastlivo_mapping" name="laserMapping" output="screen" />
+
+  <group if="$(arg rviz)">
+    <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz"
+          args="-d $(arg rviz_config)" />
+  </group>
+
+  <node pkg="image_transport" type="republish" name="republish"
+        args="compressed in:=/left_camera/image raw out:=/left_camera/image"
+        output="screen" respawn="true" />
+</launch>

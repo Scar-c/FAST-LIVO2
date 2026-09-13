@@ -687,7 +687,12 @@ void LIVMapper::handleProbLio()
   geoQuat = tf::createQuaternionMsgFromRollPitchYaw(
       euler_cur(0), euler_cur(1), euler_cur(2));
   publish_odometry(pubOdomAftMapped);
-  publish_frame_world(pubLaserCloudFullRes, vio_manager);
+  // In LIVO mode with camera VIO enabled, the following camera epoch owns
+  // the RGB projection/publication. Avoid publishing the empty legacy LIO
+  // branch here; trajectory and odometry publication remain unchanged.
+  if (!(prob_livo_backend_enabled_ && slam_mode_ == LIVO &&
+        prob_livo_camera_vio_enabled_))
+    publish_frame_world(pubLaserCloudFullRes, vio_manager);
   publish_path(pubPath);
   publish_mavros(mavros_pose_publisher);
   ++frame_num;
@@ -731,6 +736,20 @@ void LIVMapper::handleProbVio()
   // following camera epoch.  H0 calls this with visual state disabled, while
   // H1/H2 call it after FAST's visual update on the same shared state.
   prob_livo_backend_->FinalizeCameraEpoch(visual_timestamp);
+
+  // Match FAST-LIVO2's native visualization contract: use the processed
+  // camera frame to RGB-color the current world scan and accumulate it in
+  // /cloud_registered. This is publication-only and does not affect the
+  // Prob-LIVO state or estimator counters.
+  if (prob_livo_camera_vio_enabled_)
+  {
+    *pcl_w_wait_pub = *prob_livo_backend_->world_scan();
+    if (!pcl_w_wait_pub->empty())
+    {
+      publish_frame_world(pubLaserCloudFullRes, vio_manager);
+      publish_img_rgb(pubImage, vio_manager);
+    }
+  }
 }
 
 void LIVMapper::handleVIO() 

@@ -1,0 +1,246 @@
+captured_at=2026-09-13T12:41:05+08:00
+
+--- status ---
+?? spec/prob_livo/CANONICAL_CLEANUP_BEFORE.txt
+
+--- head ---
+4626db7ff50a5b42ef4e46e0e13b540f7342aea1
+
+--- branches ---
+  main
+  prob-livo
++ prompt11-native-offline
+  prompt29-common-linearization
+  prompt29-common-linearization-native
+  prompt30-prob-cn-snapshot-fix
+  prompt31-prob-cn-nonlinear-forensic
+  prompt32-native-cn-diff-trace
+  prompt32-prob-cn-diff-trace
+  prompt33-native-cn-root-cause
+  prompt33-prob-cn-root-cause
+  prompt34-prob-cn-final-fix
+  prompt35-prob-sa-cn
+  prompt36-prob-sa-livo-core
+  prompt37-prob-sa-livo-host-corrective
+* prompt38-prob-sa-map-commit-forensic
+  remotes/origin/HEAD -> origin/main
+  remotes/origin/main
+  remotes/origin/prob-livo
+  remotes/origin/prompt11-native-offline
+  remotes/origin/prompt29-common-linearization-native
+  remotes/origin/prompt30-prob-cn-snapshot-fix
+  remotes/origin/prompt31-prob-cn-nonlinear-forensic
+  remotes/origin/prompt32-native-cn-diff-trace
+  remotes/origin/prompt32-prob-cn-diff-trace
+  remotes/origin/prompt33-native-cn-root-cause
+  remotes/origin/prompt33-prob-cn-root-cause
+  remotes/origin/prompt34-prob-cn-final-fix
+  remotes/origin/prompt35-prob-sa-cn
+  remotes/origin/prompt36-prob-sa-livo-core
+  remotes/origin/prompt37-prob-sa-livo-host-corrective
+  remotes/origin/prompt38-prob-sa-map-commit-forensic
+
+--- graph ---
+* 4626db7 (HEAD -> prompt38-prob-sa-map-commit-forensic, origin/prompt38-prob-sa-map-commit-forensic) docs(prob-livo): record Prompt38 local audit refs
+* 727c6e0 docs(prob-livo): close Prompt38 evidence
+* 3f2a657 bench(prob-livo): validate corrected SA map lifecycle
+* e2002ac fix(prob-livo): repair proven SA map-commit seam
+* add7216 test(prob-livo): complete covariance forensic trace
+* b857df6 test(prob-livo): instrument deferred map commit
+* cfdaa86 docs(prob-livo): audit SA map-commit lineage
+* 9f2aa28 (origin/prompt37-prob-sa-livo-host-corrective, prompt37-prob-sa-livo-host-corrective) docs(prob-livo): close Prompt37 audit bundle
+* c87e4fb bench(prob-livo): record Prompt37 Bright corrective validation
+* f207146 test(prob-livo): enforce SA tangent and accepted-anchor invariants
+* 12beae8 fix(prob-livo): correct SA host tangent and accepted window anchors
+* c546317 docs(prob-livo): derive Prompt37 SA host tangent and anchor lifecycle
+* 8eb4e17 (origin/prompt36-prob-sa-livo-core, prompt36-prob-sa-livo-core) docs(prob-livo): close Prompt36 audit bundle
+* b10448d bench(prob-livo): record failed Bright SA core canary
+* 26c7f1c test(prob-livo): validate SA-LIVO core semantics
+* 01b3874 feat(prob-livo): add SA visual information pipeline
+* b2fb5ae docs(prob-livo): define paper-first SA-LIVO core authority
+* 08434f1 (origin/prompt35-prob-sa-cn, prompt35-prob-sa-cn) docs(prob-livo): record Prompt35 evidence
+* d9af8bb bench(prob-livo): run Bright SA-CN RViz canary
+* 83a18f7 test(prob-livo): validate SA-CN joint-loop invariants
+* 89f5776 feat(prob-livo): add SA-style unified joint update
+* 2c134da docs(prob-livo): define paper-first SA-CN semantics
+* 066ab22 (origin/prompt34-prob-cn-final-fix, prompt34-prob-cn-final-fix) audit(prob-livo): package Prompt34 evidence
+* e37632d docs(prob-livo): close Prompt34 final CN trial
+* 0aa716e fix(prob-livo): preserve state on inactive common visual handoff
+* e2947e9 bench(prob-livo): trace Prompt34 bootstrap handoff
+* 9e4ddb2 test(prob-livo): prove common handoff state preservation
+* 520244c fix(prob-livo): guard inactive common handoff
+* 91db236 (origin/prompt33-prob-cn-root-cause, prompt33-prob-cn-root-cause) docs(prob-livo): close Prompt33 root-cause audit
+* 3b92bd6 test(prob-livo): unify Prompt33 factor row identity
+* 5aa36a8 test(prob-livo): trace Prompt33 fixed-point closure
+* 5d28fbd (origin/prompt32-prob-cn-diff-trace, prompt32-prob-cn-diff-trace) test(prob-livo): complete Prompt32 N/P common differential
+* dc7ecec (origin/prompt31-prob-cn-nonlinear-forensic, prompt31-prob-cn-nonlinear-forensic) test(prob-livo): forensic common nonlinear divergence
+* 6a74832 (origin/prompt30-prob-cn-snapshot-fix, prompt30-prob-cn-snapshot-fix) docs(prob-livo): record Prompt30 Prob-CN adjudication
+* d5f5830 fix(prob-livo): close common snapshot transaction
+* 4780c9a test(prob-livo): add Prompt30 snapshot invariants
+* 8ef0174 (prompt29-common-linearization) test(prob-livo): clear stale common visual snapshot stats
+* 4b02517 feat(prob-livo): add common-linearization sequential ESIKF
+* 8743e83 (origin/prob-livo, prob-livo) bench(prob-livo): record Prompt28 BIEVR eee01 canary
+* 2f4249c Prompt27: validate Bright and GEODE degeneracy runs
+* 12694a9 docs(prob-livo): close final algorithm and NTU Oxford evidence
+* 5d38780 bench(prob-livo): close Prompt25 full FEJ matrix
+* fa4bbd4 bench(prob-livo): support Prompt25 schedule resume
+* 510dee2 fix(prob-livo): fail closed on Prompt25 pair gate errors
+* 4593b91 bench(prob-livo): add Prompt25 stability-controlled driver
+* 1582bf3 bench(prob-livo): predeclare Prompt25 FEJ matrix schedule
+* a20ac9d docs(prob-livo): publish Prompt24 FEJ canary evidence
+* b74f8ae bench(prob-livo): collect Prompt24 canary artifacts
+* 1225875 Prompt24: ignore canary runtime artifacts
+* 117926e Prompt24: add cross-modal FEJ canary seam
+* faba915 docs(prob-livo): publish Oxford NTU-style sensitivity
+* ac7fa33 chore(benchmark): ignore Prompt23 runtime outputs
+* d869a7a test(benchmark): gate Prompt23 inactive output fields
+* f0cd38c test(benchmark): add Oxford NTU-style LIVO stride ablation
+* 94fe832 docs(prob-livo): publish final NTU Oxford matrix
+* cc3814a fix(benchmark): normalize Prompt22 affinity and failure propagation
+* 6b89f06 test(benchmark): gate Prompt22 Oxford matrix admission
+* a138780 chore(benchmark): ignore Prompt22 runtime outputs
+* 54f60d1 test(benchmark): preserve retry artifacts for Prompt22 canaries
+* 47e305f test(benchmark): use corrected native devel for Prompt22 runs
+* f0316df test(benchmark): add shared semantic config identity gate
+* d5e2dac test(benchmark): freeze final NTU Oxford shared config authority
+* ade2c15 docs(prob-livo): close prompt21 lifetime and matrix audit
+* 073b759 fix(prob-livo): drive visual lifetime from Super parent eviction
+* 015c5a7 docs(prob-livo): close prompt20 visual memory evidence
+* 955af97 feat(prob-livo): add visual patch ownership and parent LRU
+* f5a5546 docs(prob-livo): close Prompt19 canonical stride comparison
+* 407da0a test(benchmark): predeclare clean serial prompt19 reruns
+* 781ce08 test(benchmark): predeclare prompt19 replacement runs
+* 9a3f003 test(benchmark): finalize prompt19 canonical run ids
+* 31b9a8a test(benchmark): correct prompt19 affinity ledger encoding
+* f3bafab test(benchmark): predeclare prompt19 canonical run order
+* 5379f63 feat(prob-livo): expose native blind-carry scheduler policy
+* 3974c77 docs(prob-livo): close prompt18 evidence
+* c703864 fix(prob-livo): avoid duplicate compressed image gate
+* 77c93e1 fix(prob-livo): accept Oxford compressed camera topics
+* 0dd637b feat(prob-livo): audit online camera stride selection
+* c3f7f69 fix(prob-livo): persist LIVO bucket counters
+* 1d46353 fix(prob-livo): restore Oxford LIVO bucket ownership
+* dc5242c docs(prob-livo): close Prompt17 late-point semantics
+* c4d07eb feat(prob-livo): evaluate Oxford online runs
+* 1a39d1a fix(prob-livo): align late-point trace schema
+* 6b4eb9c test(prob-livo): record late-point runtime evidence
+* 64e5023 fix(prob-livo): extrapolate native late points at terminal motion
+* 7337ede docs(prob-livo): keep Prompt16 report concise
+* ea9f23b docs(prob-livo): close Prompt16 Oxford diagnosis
+* c863bcb diag(prob-livo): record Oxford point time bounds
+* f747f34 diag(prob-livo): trace Prompt16 Oxford first failures
+* 5d0bfb0 build(prob-livo): ignore Prompt16 runtime artifacts
+* ab70854 config(prob-livo): add Prompt16 Oxford official overlay
+* 6916d7e docs(prob-livo): record Prompt15 ATE RMSE results
+* 00f1246 bench(prob-livo): add resumable Prompt15 matrix driver
+* c69bae4 fix(prob-livo): preserve LIVO IMU lookahead
+* 58f5435 bench(prob-livo): record final backend rejection
+* f8bf759 bench(prob-livo): add Prompt15 formal slot runner
+* 7c5945e chore(prob-livo): ignore Prompt15 runtime artifacts
+* 2f3c6dc bench(prob-livo): add Prompt15 measurement contract
+* 9d2ba53 docs(prob-livo): predeclare Prompt15 benchmark ledger
+* 9c3eb35 docs(prob-livo): close Prompt10 characterization evidence
+* 9fd61eb chore(prob-livo): harden Prompt10 runner status handling
+* 76a50eb fix(prob-livo): match native publish policy in Prompt10
+* 1400cff fix(prob-livo): record native shutdown exit in benchmark
+* 5f5f541 fix(prob-livo): load native camera contract for LIO runner
+* 9b1e85f tools(prob-livo): add Prompt10 memory characterization runners
+* 3cba6f0 refactor(prob-livo): remove obsolete input semantics helper
+* df6f19a docs(prob-livo): register Prompt 10 characterization
+* 9802d8f docs(prob-livo): close Prompt 9 corrective evidence
+* 1cec675 fix(prob-livo): close Prompt 9 visual corrective seams
+* af3c82f docs(prob-livo): close I6 camera-on evidence
+* fdddd2e fix(prob-livo): make visual convergence reduction deterministic
+* a354513 fix(prob-livo): commit deterministic callback replay switch
+* 469139a fix(prob-livo): include ROS callback queue definition
+* fdfb627 test(prob-livo): parameterize online camera ablations
+* 4b45a5f feat(prob-livo): wire camera-on offline visual gates
+* c4612b5 docs(prob-livo): close I5 evidence
+* 74ab89e feat(prob-livo): add OctVox-backed plane provider
+* 557a9be fix(prob-livo): close pointWithVar visual semantics
+* 8464b33 docs(prob-livo): mark Prompt6 stage state
+* e15b18b docs(prob-livo): close I4 adapter evidence
+* a3ef69f fix(prob-livo): keep I4 adapter dormant for camera-off LIO
+* 15faeed feat(prob-livo): add pointWithVar current-scan adapter
+* 3ae8f8e test(prob-livo): close initialization numeric attribution
+* f85c7d0 docs(prob-livo): attribute I3 migration divergence
+* fb159ca docs(prob-livo): record offline runner user directive
+* d891255 docs(prob-livo): close Prompt4 Super-input parity
+* 210e2ea docs(prob-livo): register Prompt4 parity specification
+* 3eec40c fix(prob-livo): isolate Super endpoint handling from native
+* 15d2c9c fix(prob-livo): retain pre-lidar IMU for Super init
+* 478b9e7 perf(prob-livo): use TBB for offline hot loops
+* eb3340c fix(prob-livo): align legacy Super startup timing
+* cdba474 feat(prob-livo): add in-process offline production runner
+* a12777a fix(prob-livo): preserve Super post-endpoint point handling
+* 480ca32 fix(prob-livo): restore Super NTU input parity semantics
+* df83f63 docs(prob-livo): complete I3 final report format
+* c36a96b fix(prob-livo): record runtime authority counters
+* c6533de docs(prob-livo): close I3 camera-off baseline
+* ce805bb fix(prob-livo): isolate ROS home in EEE01 runner
+* e1c63cb fix(prob-livo): correct EEE01 runner workspace paths
+* 30e5e3e feat(prob-livo): wire camera-off P0-P4 backend
+* 27854c0 fix(prob-livo): close init-to-runtime lifecycle handoff
+* 54a2158 docs(prob-livo): close I2 evidence record
+* 689e0d3 feat(prob-livo): add Super-native IMU propagation and undistortion adapter
+* ce6fce9 docs(prob-livo): activate Super IMU stage
+* a3458c6 fix(prob-livo): close Super observation lifecycle seam
+* ecd8058 docs(prob-livo): close I1 evidence record
+* baf6e48 test(prob-livo): prove ProbESKF19 parity with Super oracle
+* 7dfda14 feat(prob-livo): add Super-semantic 19d filter core
+* 4d1c654 docs(prob-livo): register ProbESKF19 stage and correct I0 evidence
+* 9ed486c docs(prob-livo): record bootstrap branch push
+* 7dac83e docs(prob-livo): bootstrap integration architecture and spec
+| * d9f6680 (origin/prompt33-native-cn-root-cause, prompt33-native-cn-root-cause) test(native): unify Prompt33 factor row identity
+| * b42569b test(native): trace Prompt33 fixed-point closure
+| * e71d4c9 (origin/prompt32-native-cn-diff-trace, prompt32-native-cn-diff-trace) test(prob-livo): add native Prompt32 differential traces
+| * 2bd8c53 (origin/prompt29-common-linearization-native, prompt29-common-linearization-native) feat(native): add common-linearization sequential update
+| * 12d434e (origin/prompt11-native-offline, prompt11-native-offline) Prompt24: add cross-modal FEJ canary seam
+| * ea7702b fix(native): close visual patch temporary ownership
+| * 84757c4 fix(native): support isolated offline runner layout
+| * f7ba29d bench(native): add deterministic camera stride audit
+| * 0f4881a bench(native): instrument Prompt15 offline runs
+| * bf01385 docs(native): close Prompt14 LIVO adjudication
+| * 4a57b10 fix(native): match PCL Eigen allocation alignment
+| * 6500070 fix(native): discard unprocessable EOF tails
+| * e937ab9 fix(native): detect exited mapper during online drain
+| * 211627d fix(native): drain online input before completion
+| * 9f346a3 fix(native): initialize point-to-plane validity and add visual diagnostics
+| * c363f68 docs(native): close Prompt13 reproducibility diagnosis
+| * 9496141 fix(native): initialize cached visual references safely
+| * f2ecc96 docs(native): close Prompt12 diagnosis
+| * 624653e test(native): assert shutdown fault exit remains nonzero
+| * 3ebcc4c fix(native): classify shutdown faults and count ref commits
+| * f4c74fb build(native): expose diagnostic OpenMP worker override
+| * be00d49 docs(native): close Prompt11 offline evidence
+| * 92f26dc fix(native): preserve native LIVO trajectory output semantics
+| * a0d84a5 fix(native): separate scheduler polls from successful steps
+| * 50e0d46 feat(native): add unified online offline event source runner
+|/  
+* 0d2c034 (origin/main, origin/HEAD, main) [Docs] update FAST-LIVO2-Dataset download link.
+* b145cbd [Fix] correct quaternion component order.
+* 6fb5651 [Feat] add output format required by LiDAR-visual BA.
+* 9819553 [Update] update the related paper.
+* 8aac9d5 [Docs] mark core contributors/developers.
+* 7e88460 [Feat] add support for Robosense Airy and Hesai Pandar128.
+* 46ad5e7 [Feat] add support for HILTI22 dataset.
+* af39d8e [Fix] fix issue #269: timestamp bug of Ouster and Velodyne.
+* c96f4a0 [Update] update our LiDAR-camera calibration method FAST-Calib.
+* 1666b09 [Enh] remove dependency on livox_ros_driver.
+* 137b660 [Feat] provide the evaluation method for NTU-VIRAL.
+* 998eada [Feat] add support for NTU-VIRAL dataset.
+* 6289d03 [Enh] add point cloud undistortion in LO mode (issue #136).
+* 162f843 [Feat] add support for MARS-LVIG dataset.
+* 6be251b [Fix] fix issue #61: save PCD when img_en = 0.
+* 0b79037 [Enh] fix issue #100: add LO mode.
+* 7951a2f [Fix] fix issue #93: output point number equals 0.
+* 8ad8f62 [Fix] fix bugs in issues #65, #69, #74, and #77.
+* 986b4b1 [Release] code is now available!
+* 91e4c64 [Update] update the news and Bilibili link.
+* 5b82e77 [Update] update the arXiv paper link.
+* 6b828b9 [Update] update the revised supplementary material.
+* 96d9512 [Add] add UAV auto-navigation related.
+* e72a070 [Add] add high-resolution screenshots of FAST-LIVO2 results.
+* 64f225d [Update] update readme and supplementary material.
+* fe0a6e3 [Update] update the supplementary material.
+* e147083 Initial commit

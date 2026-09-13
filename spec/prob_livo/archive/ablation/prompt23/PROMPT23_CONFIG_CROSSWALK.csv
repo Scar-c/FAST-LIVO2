@@ -1,0 +1,5 @@
+semantic_key,prompt22_oxford,prompt23_oxford_ntu_style,classification,authority_or_reason
+preprocess/filter_size_surf,0.5,0.1,ABLATION_SHARED_EXACT_CHANGE,Prompt23 explicitly permits this single shared LiDAR change
+lio/min_eigen_value,0.01,0.0025,ABLATION_SHARED_EXACT_CHANGE,Prompt23 explicitly permits this single shared LIO gate change
+all_other_prompt22_shared_semantics,SAME,SAME,SHARED_EXACT,Inherited unchanged from Prompt22 Oxford profile
+camera_stride,Church=1;College=2;Palace=2;Quarter=2,Church=1;College=2;Palace=2;Quarter=2,SHARED_EXACT,Frozen Prompt18/19 policy

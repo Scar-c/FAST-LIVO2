@@ -1,0 +1,3 @@
+dataset,variant,run_kind,run_directory,fej,rviz,rc,complete,visual_active,trajectory_rows,trajectory_sha256,ate_rmse,status,notes
+Bright_Screen_Wall,Native FAST-LIVO2,formal,results/prob_livo/runs/prompt27_bright_native_online_rviz_color_accum1,OFF,ON,0,yes,yes,664,287c1ce7d795a95777c42f02110e5fa9b1c4794325c14ec97636ae6c0ab5348b,NO_AUTHORITATIVE_GT,CLEAN_SUCCESS,RGB8 registered cloud and accumulated RViz display verified
+Bright_Screen_Wall,Native FAST-LIVO2,diagnostic,results/prob_livo/runs/prompt27_bright_native_online_rviz_retry1,OFF,ON,0,yes,yes,664,287c1ce7d795a95777c42f02110e5fa9b1c4794325c14ec97636ae6c0ab5348b,NO_AUTHORITATIVE_GT,PRECURSOR,prior Native RViz evidence before final RGB accumulation layout
